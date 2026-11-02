@@ -1,4 +1,4 @@
-/* Saturn TV 0.3.0 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.3.1 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.3.0'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.3.1'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -148,6 +148,41 @@
       new win.MutationObserver(scheduleScan).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src']});
     }
     var bar = null, buttons = [], previousFocus = null, message = null;
+    var hiddenOverlays = [];
+    function overlayCandidate(el) {
+      if (!el || el === doc.body || el === doc.documentElement || !win.getComputedStyle || !el.getBoundingClientRect) return false;
+      if (/^(VIDEO|AUDIO|INPUT|BUTTON)$/.test(el.tagName) || /^saturn-/.test(el.id || '')) return false;
+      var css = win.getComputedStyle(el), rect = el.getBoundingClientRect();
+      if (css.position !== 'fixed' || css.display === 'none' || css.visibility === 'hidden' || css.pointerEvents === 'none' || css.opacity === '0' ||
+          rect.width < win.innerWidth * 0.3 || rect.height < win.innerHeight * 0.25) return false;
+      if (el.querySelector && el.querySelector('video,audio,iframe[src*="/embed/"],iframe[src*="turnstile"],iframe[src*="recaptcha"],input[type="password"]')) return false;
+      if (el.tagName === 'IFRAME' && /\/embed\/|turnstile|recaptcha/i.test(el.getAttribute('src') || '')) return false;
+      return true;
+    }
+    function hideOverlay() {
+      if (!doc.querySelectorAll || !win.getComputedStyle) { tell('Rimozione non disponibile.'); return; }
+      var nodes = doc.querySelectorAll('div,section,aside,iframe,dialog'), best = null, score = -1;
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (!overlayCandidate(el)) continue;
+        var inside = el, own = false;
+        while (inside && inside !== doc.body) { if (/^saturn-/.test(inside.id || '')) own = true; inside = inside.parentNode; }
+        if (own) continue;
+        var css = win.getComputedStyle(el), z = parseInt(css.zIndex, 10) || 0;
+        if (z > score) { best = el; score = z; }
+      }
+      if (!best) { tell('Nessun overlay separabile dal player trovato.'); return; }
+      hiddenOverlays.push({element:best, style:best.getAttribute('style')});
+      best.style.setProperty('display', 'none', 'important');
+      tell('Riquadro nascosto. Se era utile, scegli Annulla rimozione.');
+    }
+    function undoOverlay() {
+      var item = hiddenOverlays.pop();
+      if (!item) { tell('Nessuna rimozione da annullare.'); return; }
+      if (item.style === null) item.element.removeAttribute('style'); else item.element.setAttribute('style',item.style);
+      tell('Riquadro ripristinato.');
+    }
+
     var bookmarkKey = 'saturn-bookmark';
     function safeBookmark() {
       try {
@@ -165,6 +200,8 @@
       win.location.reload();
     }
     api.actions = {
+      overlay: hideOverlay,
+      undoOverlay: undoOverlay,
       reload: function () { win.location.reload(); },
       back: function () { win.history.back(); },
       forward: function () { win.history.forward(); },
@@ -208,7 +245,7 @@
       var stats = doc.createElement('p');
       stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
       bar.appendChild(stats);
-      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Chiudi barra', 'close']];
+      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Chiudi barra', 'close']];
       for (var i = 0; i < specs.length; i++) {
         var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
         btn.setAttribute('data-saturn-action', specs[i][1]);

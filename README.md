@@ -64,3 +64,17 @@ node --test test/*.test.cjs
 `saturn.js` è la sorgente; `saturn-0.3.0.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Nessuna dipendenza o telemetria aggiunta dal modulo; il sito mantiene le proprie richieste non filtrate.
+
+## 0.3.1: rimozione manuale degli overlay
+
+Indietro/Blu → Nascondi overlay nasconde il riquadro fisso grande con z-index più alto,
+escludendo l’interfaccia Saturn, video, audio, iframe /embed/, CAPTCHA noti e login.
+Annulla rimozione ripristina esattamente lo stile precedente. È un’azione manuale:
+un riquadro legittimo potrebbe essere selezionato, per questo è reversibile.
+Non garantisce la rimozione di finestre native o interni di player cross-origin.
+
+Sono state consultate le liste pubbliche uBlock/uAssets ed EasyList. Le sole regole
+AnimeSaturn trovate nei file consultati riguardano animesaturn.cx (2024), non .at.
+Non sono state importate né eseguite regole legacy non verificate. Il progetto non
+include il motore uBlock e non possiede le API di filtraggio di rete delle estensioni.
+Riferimenti: https://github.com/uBlockOrigin/uAssets e https://github.com/easylist/easylist
