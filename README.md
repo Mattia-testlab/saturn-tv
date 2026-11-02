@@ -11,7 +11,7 @@ Compatibilità fisica e riproduzione sul televisore NON ancora verificate.
   osservato durante l'ispezione del sito. Non usa liste complete EasyList/uBlock.
 - Filtra fetch, XHR e inserimenti dinamici di script/iframe riconosciuti.
 - Mantiene i normali collegamenti agli episodi e gli iframe video non bloccati.
-- Blu apre/chiude la barra browser. Frecce selezionano, OK esegue, Indietro chiude.
+- Indietro oppure Blu apre/chiude la barra browser. In pieno schermo e nei campi di testo, Indietro resta al player o alla tastiera. Per la pagina precedente usare Indietro nella barra. Frecce selezionano, OK esegue, Indietro chiude.
 - Barra: Indietro, Avanti, Aggiorna, Home, Salva pagina, Riapri salvato, Filtro, Chiudi.
 - Salva pagina conserva un singolo collegamento sul dispositivo, non il minuto del video.
 - Giallo cambia protezione e ricarica:

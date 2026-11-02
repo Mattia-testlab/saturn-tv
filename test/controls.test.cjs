@@ -53,3 +53,17 @@ test('storage failures produce feedback without navigating', () => {
   f.api.actions.save(); assert.equal(f.calls.length, 0);
   assert.match(f.doc.body.children[0].children.at(-1).textContent, /non disponibile/);
 });
+test('Back opens and closes toolbar without navigating, but respects fullscreen and text fields', () => {
+  const f = fixture();
+  f.key(10009); assert.equal(f.buttons().length, 8);
+  f.key(10009); assert.equal(f.doc.body.children.length, 0);
+  assert.deepEqual(f.calls, []);
+  f.doc.fullscreenElement = {};
+  f.key(10009); assert.equal(f.doc.body.children.length, 0);
+  f.doc.fullscreenElement = null;
+  f.doc.activeElement = {tagName: 'INPUT'};
+  f.key(10009); assert.equal(f.doc.body.children.length, 0);
+  f.doc.activeElement = null;
+  f.key(415); f.key(19); f.key(10252);
+  assert.equal(f.doc.body.children.length, 0);
+});

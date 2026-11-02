@@ -1,4 +1,4 @@
-/* Saturn TV 0.2.1 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.2.2 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.1'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.2'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -198,11 +198,16 @@
     doc.addEventListener('keydown', function (event) {
       if (win !== win.top) return;
       var code = event.keyCode;
-      if (code === 405 || code === 406 || (bar && [37, 38, 39, 40, 13, 27, 10009].indexOf(code) !== -1)) {
+      // Let the player and on-screen keyboard handle Back in their own contexts.
+      var target = event.target || doc.activeElement;
+      if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
+          (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)))) return;
+      if (code === 405 || code === 406 || code === 10009 || (bar && [37, 38, 39, 40, 13, 27, 10009].indexOf(code) !== -1)) {
         event.preventDefault(); event.stopImmediatePropagation();
+        if (event.repeat) return;
         if (code === 405) toggleFilter();
-        else if (code === 406) status();
-        else if (code === 27 || code === 10009) hideBar();
+        else if (code === 406 || code === 10009) status();
+        else if (code === 27) hideBar();
         else if (code === 13) { if (doc.activeElement && buttons.indexOf(doc.activeElement) !== -1) doc.activeElement.click(); }
         else {
           var pos = buttons.indexOf(doc.activeElement), step = (code === 37 || code === 38) ? -1 : 1;

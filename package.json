@@ -1,6 +1,6 @@
 {
   "name": "saturn-tv-prototype",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Prototipo sperimentale per AnimeSaturn su TizenBrew",
   "packageType": "mods",
