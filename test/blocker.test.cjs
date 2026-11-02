@@ -1,14 +1,14 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {hostBlocked, install} = require('../saturn.js');
-function fixture(host = 'animesaturn.at', disabled = false) {
+function fixture(host = 'www.animesaturn.net', disabled = false) {
   const handlers = {};
   function Node() {}
   Node.prototype.appendChild = function (node) { this.appended = node; return node; };
   Node.prototype.insertBefore = Node.prototype.appendChild;
   const doc = {addEventListener(n, f) { handlers[n] = f; }, querySelectorAll() { return []; }};
   let opened = 0, fetched = 0, reloaded = 0;
-  const win = {document: doc, Node, URL, Promise, location: {hostname: host, href: 'https://' + host + '/watch/test', reload() { reloaded++; }}, sessionStorage: {getItem() { return disabled ? '1' : null; }, setItem() {}}, open() { opened++; return 'opened'; }, fetch() { fetched++; return Promise.resolve('video'); }, setTimeout() {}};
+  const win = {document: doc, Node, URL, Promise, location: {hostname: host, href: 'https://' + host + '/anime/test', reload() { reloaded++; }}, sessionStorage: {getItem() { return disabled ? '1' : null; }, setItem() {}}, open() { opened++; return 'opened'; }, fetch() { fetched++; return Promise.resolve('video'); }, setTimeout() {}};
   win.top = win;
   return {win, handlers, counts: () => ({opened, fetched, reloaded})};
 }
@@ -23,7 +23,7 @@ test('blocks new windows without preventing same-page browser navigation', () =>
   const f = fixture(); const api = install(f.win);
   assert.equal(f.win.open('https://example.com'), null);
   assert.equal(api.popups, 1); assert.equal(f.counts().opened, 0);
-  assert.equal(f.win.location.href, 'https://animesaturn.at/watch/test');
+  assert.equal(f.win.location.href, 'https://www.animesaturn.net/anime/test');
 });
 test('rejects ad fetch while permitting video and query strings mentioning ad hosts', async () => {
   const f = fixture(); install(f.win);
@@ -42,13 +42,13 @@ test('does not insert a known advertising script, preserves the site player ifra
 test('captures a new-tab link but leaves ordinary episode links alone', () => {
   const f = fixture(); install(f.win); let prevented = 0;
   const event = target => ({target, preventDefault() { prevented++; }, stopImmediatePropagation() {}});
-  f.handlers.click(event({tagName: 'A', getAttribute(k) { return k === 'target' ? '_blank' : '/watch/next'; }}));
+  f.handlers.click(event({tagName: 'A', getAttribute(k) { return k === 'target' ? '_blank' : '/anime/next'; }}));
   assert.equal(prevented, 1);
-  f.handlers.click(event({tagName: 'A', getAttribute(k) { return k === 'href' ? '/watch/next' : null; }}));
+  f.handlers.click(event({tagName: 'A', getAttribute(k) { return k === 'href' ? '/anime/next' : null; }}));
   assert.equal(prevented, 1);
 });
 test('disabled mode preserves original open and fetch', async () => {
-  const f = fixture('animesaturn.at', true); install(f.win);
+  const f = fixture('www.animesaturn.net', true); install(f.win);
   assert.equal(f.win.open('https://example.com'), 'opened');
   assert.equal(await f.win.fetch('https://doubleclick.net/ad'), 'video');
 });
@@ -86,8 +86,35 @@ test('programmatic form.submit blocks external ads while preserving same-site su
 });
 test('same-window external links are blocked but an episode link is preserved', () => {
   const f=fixture();install(f.win);let blocked=0;
-  for(const href of ['https://073m.com/afu.php','https://animesaturn.at.evil.test/','/watch/test']){
+  for(const href of ['https://073m.com/afu.php','https://www.animesaturn.net.evil.test/','/anime/test']){
     f.handlers.click({target:{tagName:'A',getAttribute(k){return k==='href'?href:'_self';}},preventDefault(){blocked++;},stopImmediatePropagation(){}});
   }
   assert.equal(blocked,2);
+});
+test('official migration rejects old domain and lookalikes while accepting the verified player',()=>{
+ assert.equal(install(fixture('animesaturn.at').win),null);
+ assert.equal(install(fixture('www.animesaturn.net.evil.test').win),null);
+ assert.equal(install(fixture('evil.animesaturn.net').win),null);
+ assert.ok(install(fixture('animesaturn.net').win));
+ assert.ok(install(fixture('play.saturncdn.net').win));
+});
+test('player bridge ignores wrong origins and sources before requesting fullscreen',()=>{
+ const f=fixture('www.animesaturn.net'),events={};let requests=0;
+ f.win.addEventListener=(key,fn)=>events[key]=fn;
+ const child={},frame={contentWindow:child,getBoundingClientRect(){return {width:640,height:360};},requestFullscreen(){requests++;return Promise.resolve();}};
+ f.win.document.querySelector=()=>frame;
+ install(f.win);
+ for(const event of [{source:child,origin:'https://evil.test'},{source:{},origin:'https://play.saturncdn.net'}])events.message({...event,data:{saturnTV:1,type:'fullscreen'}});
+ assert.equal(requests,0);
+ events.message({source:child,origin:'https://play.saturncdn.net',data:{saturnTV:1,type:'fullscreen'}});assert.equal(requests,1);
+});
+test('player click bridge accepts only parent site and coordinates inside frame',()=>{
+ const f=fixture('play.saturncdn.net'),events={},parent={};let clicks=0;
+ f.win.top={};f.win.parent=parent;f.win.innerWidth=640;f.win.innerHeight=360;
+ f.win.addEventListener=(key,fn)=>events[key]=fn;
+ f.win.document.elementFromPoint=()=>({click(){clicks++;}});
+ install(f.win);
+ const message=(origin,x)=>events.message({source:parent,origin,data:{saturnTV:1,type:'click',x,y:30}});
+ message('https://evil.test',20);message('https://www.animesaturn.net',900);assert.equal(clicks,0);
+ message('https://www.animesaturn.net',20);assert.equal(clicks,1);
 });

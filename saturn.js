@@ -1,9 +1,9 @@
-/* Saturn TV 0.5.0 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.6.0 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
     'subsignsodaic.com', 'doubleclick.net', 'googlesyndication.com',
-    'adsterra.com', 'popads.net', 'popcash.net', '073m.com'
+    'adsterra.com', 'popads.net', 'popcash.net', '073m.com', 'a-ads.com', 'wingsmob.com', 'sowve.com', 'chagnougroalry.net'
   ];
   function hostBlocked(host) {
     host = String(host || '').toLowerCase().replace(/\.$/, '');
@@ -13,15 +13,16 @@
     }
     return false;
   }
+  function siteHost(host) { return /^(www\.)?animesaturn\.net$/.test(String(host).toLowerCase()); }
   function install(win) {
     try {
       if (win.__saturnTV) return win.__saturnTV;
       // Do not install on unrelated sites. Nested foreign frames are out of scope.
       var host = win.location.hostname.toLowerCase();
-      if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
+      if (!siteHost(host) && host !== 'play.saturncdn.net') return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.5.0'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.6.0'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -32,7 +33,7 @@
       try {
         var u = new win.URL(String(url), win.location.href);
         return (u.protocol === 'https:' || u.protocol === 'http:') &&
-          (u.hostname === 'animesaturn.at' || /\.animesaturn\.at$/.test(u.hostname));
+          siteHost(u.hostname);
       } catch (e) { return false; }
     }
     function resource(el) {
@@ -168,7 +169,7 @@
     var speedSaved = readJSON('saturn-speed', 500); if ([350,500,700].indexOf(speedSaved)!==-1) cursorSpeed=speedSaved;
     learned=readJSON('saturn-overlay-rules',[]); if (!Array.isArray(learned)) learned=[];
     function safePage(saved) {
-      try { var u=new win.URL(saved.url); return u.protocol==='https:' && u.hostname==='animesaturn.at' && !u.username && !u.password; } catch(e) {return false;}
+      try { var u=new win.URL(saved.url); return u.protocol==='https:' && siteHost(u.hostname) && !u.username && !u.password; } catch(e) {return false;}
     }
     function overlaySignature(el) {
       var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');
@@ -189,7 +190,8 @@
       var css = win.getComputedStyle(el), rect = el.getBoundingClientRect();
       if (css.position !== 'fixed' || css.display === 'none' || css.visibility === 'hidden' || css.pointerEvents === 'none' || css.opacity === '0' ||
           rect.width < win.innerWidth * 0.3 || rect.height < win.innerHeight * 0.25) return false;
-      if (el.querySelector && el.querySelector('video,audio,iframe[src*="/embed/"],iframe[src*="turnstile"],iframe[src*="recaptcha"],input[type="password"]')) return false;
+      if (el.id==='watch-iframe')return false;
+      if (el.querySelector && el.querySelector('video,audio,iframe#watch-iframe,iframe[src*="/embed/"],iframe[src*="turnstile"],iframe[src*="recaptcha"],input[type="password"]')) return false;
       if (el.tagName === 'IFRAME' && /\/embed\/|turnstile|recaptcha/i.test(el.getAttribute('src') || '')) return false;
       return true;
     }
@@ -232,7 +234,7 @@
         var saved = JSON.parse(win.localStorage.getItem(bookmarkKey) || 'null');
         if (!saved || typeof saved.url !== 'string') return null;
         var url = new win.URL(saved.url);
-        if (url.protocol !== 'https:' || url.hostname !== 'animesaturn.at' || url.username || url.password) return null;
+        if (url.protocol !== 'https:' || !siteHost(url.hostname) || url.username || url.password) return null;
         return saved;
       } catch (e) { return null; }
     }
@@ -253,7 +255,7 @@
         var exit = doc.exitFullscreen || doc.webkitExitFullscreen; if (exit) exit.call(doc); return;
       }
       if (cinema) { exitCinema(); return; }
-      var nodes = doc.querySelectorAll('video,iframe[src*="/embed/"]'), best = null, area = 0;
+      var nodes = doc.querySelectorAll('video,iframe#watch-iframe,iframe[src*="/embed/"]'), best = null, area = 0;
       for (var i = 0; i < nodes.length; i++) {
         var rect = nodes[i].getBoundingClientRect(), a = rect.width * rect.height;
         if (a > area) { area = a; best = nodes[i]; }
@@ -297,7 +299,7 @@
     function activateFullscreen(el, frame) {
       if (!fullscreenControl(el)) return false;
       if (win !== win.top) {
-        try { win.top.__saturnTV.fullscreenFromPlayer(win.frameElement); } catch(e) { return false; }
+        try { win.top.__saturnTV.fullscreenFromPlayer(win.frameElement); } catch(e) { if(host==='play.saturncdn.net')win.parent.postMessage({saturnTV:1,type:'fullscreen'},'https://www.animesaturn.net');else return false; }
       } else fullscreen(frame);
       return true;
     }
@@ -311,7 +313,7 @@
       }
     }
     api.actions = {
-      blackClover50: function () { win.location.assign('https://animesaturn.at/watch/black-clover-jgswge/ep-50'); },
+      blackClover50: function () { win.location.assign('https://www.animesaturn.net/anime/black-clover-67Dip/ep-50'); },
       fullscreen: function () { fullscreen(); },
       speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; writeJSON('saturn-speed',cursorSpeed); refreshLabels(); },
       autoOverlay: function () {
@@ -326,12 +328,12 @@
       reload: function () { win.location.reload(); },
       back: function () { win.history.back(); },
       forward: function () { win.history.forward(); },
-      home: function () { win.location.assign('https://animesaturn.at/'); },
+      home: function () { win.location.assign('https://www.animesaturn.net/'); },
       filter: toggleFilter,
       save: function () {
         try {
           var url = new win.URL(win.location.href);
-          if (url.protocol !== 'https:' || url.hostname !== 'animesaturn.at' || url.username || url.password) {
+          if (url.protocol !== 'https:' || !siteHost(url.hostname) || url.username || url.password) {
             tell('Puoi salvare solo una pagina di AnimeSaturn.'); return;
           }
           win.localStorage.setItem(bookmarkKey, JSON.stringify({url: url.href, title: doc.title || 'Episodio salvato'}));
@@ -346,11 +348,11 @@
       }
     };
     function episodeLinks() {
-      var match=new win.URL(win.location.href).pathname.match(/^\/watch\/([^/]+)\/ep-(\d+)/);
+      var match=new win.URL(win.location.href).pathname.match(/^\/(?:anime|episode)\/([^/]+)\/ep-(\d+)/);
       var result={previous:null,next:null}; if(!match) return result;
       var links=doc.querySelectorAll('a[href]'), current=Number(match[2]), lower=-1, higher=Infinity;
       for(var i=0;i<links.length;i++) try {
-        var u=new win.URL(links[i].getAttribute('href'),win.location.href), m=u.pathname.match(/^\/watch\/([^/]+)\/ep-(\d+)/);
+        var u=new win.URL(links[i].getAttribute('href'),win.location.href), m=u.pathname.match(/^\/(?:anime|episode)\/([^/]+)\/ep-(\d+)/);
         if(!m || m[1]!==match[1] || !allowedNavigation(u.href)) continue;
         var n=Number(m[2]); if(n<current && n>lower){lower=n;result.previous=u.href;} if(n>current&&n<higher){higher=n;result.next=u.href;}
       } catch(e) {}
@@ -359,7 +361,7 @@
     api.actions.previousEpisode=function(){var u=episodeLinks().previous;if(u)win.location.assign(u);};
     api.actions.nextEpisode=function(){var u=episodeLinks().next;if(u)win.location.assign(u);};
     api.actions.search=function(){
-      var input=doc.querySelector && doc.querySelector('input[type=search],input[name=keyword]');
+      var input=doc.querySelector && doc.querySelector('input[type=search],input[name=key],input[name=keyword]');
       if(!input){tell('Ricerca non presente: apri Home.');return;} hideBar(); input.focus(); if(input.scrollIntoView)input.scrollIntoView({block:'center'});
     };
     api.actions.settings=function(){switchView('settings');};
@@ -378,7 +380,7 @@
       for(var i=0;i<videos.length;i++)(function(video){
         if(video.__saturnProgress)return;video.__saturnProgress=true;
         var page;try{page=win.top.location.href;}catch(e){return;}
-        if(!/\/watch\//.test(page))return;
+        if(!/\/(?:anime|episode)\/[^/]+\/ep-\d+/.test(page))return;
         var previous=readJSON('saturn-progress',{}), saved=previous[page];
         function restore(){if(saved && saved>5 && isFinite(video.duration) && saved<video.duration-15)try{video.currentTime=saved;}catch(e){}}
         if(video.readyState>=1)restore();else video.addEventListener('loadedmetadata',restore);
@@ -388,7 +390,7 @@
         });
       })(videos[i]);
     }
-    function rememberPage(){if(win!==win.top || !/\/watch\//.test(win.location.href))return;writeJSON('saturn-last',{url:win.location.href,title:doc.title||'Ultima puntata'});}
+    function rememberPage(){if(win!==win.top || !/\/(?:anime|episode)\/[^/]+\/ep-\d+/.test(win.location.href))return;writeJSON('saturn-last',{url:win.location.href,title:doc.title||'Ultima puntata'});}
     rememberPage();bindProgress();doc.addEventListener('DOMContentLoaded',rememberPage);
     function hideBar() {
       if (!bar) return;
@@ -477,7 +479,10 @@
             if (!frame) frame = el;
             var rect = el.getBoundingClientRect(); hitX -= rect.left; hitY -= rect.top;
             el = el.contentDocument.elementFromPoint(hitX, hitY);
-          } catch (e) { return; }
+          } catch (e) {
+            if(frame && frame.id==='watch-iframe')try{if(new win.URL(frame.src,win.location.href).hostname==='play.saturncdn.net')frame.contentWindow.postMessage({saturnTV:1,type:'click',x:hitX,y:hitY},'https://play.saturncdn.net');}catch(ignore){}
+            return;
+          }
         }
         if (el) {
           if (activateFullscreen(el, frame)) return;
@@ -540,7 +545,9 @@
     var keyTarget = win.addEventListener ? win : doc;
     function handleKey(event) {
       if (win !== win.top) {
-        try { if (win.top.__saturnTV && win.top.__saturnTV.handleKey) win.top.__saturnTV.handleKey(event); } catch (e) {}
+        try { if (win.top.__saturnTV && win.top.__saturnTV.handleKey) win.top.__saturnTV.handleKey(event); } catch (e) {
+          if(host==='play.saturncdn.net' && !doc.fullscreenElement && [37,38,39,40,13,10009,406].indexOf(event.keyCode)!==-1){event.preventDefault();event.stopImmediatePropagation();win.parent.postMessage({saturnTV:1,type:'key',code:event.keyCode,repeat:!!event.repeat},'https://www.animesaturn.net');}
+        }
         return;
       }
       var code = event.keyCode;
@@ -593,8 +600,22 @@
     api.releaseKey = function (code) { delete held[code]; };
     keyTarget.addEventListener('keyup', function(event) {
       delete held[event.keyCode];
-      if (win !== win.top) { try { win.top.__saturnTV.releaseKey(event.keyCode); } catch(e) {} }
+      if (win !== win.top) { try { win.top.__saturnTV.releaseKey(event.keyCode); } catch(e) {if(host==='play.saturncdn.net')win.parent.postMessage({saturnTV:1,type:'keyup',code:event.keyCode},'https://www.animesaturn.net');} }
     }, true);
+    if(win.addEventListener)win.addEventListener('message',function(event){
+      var data=event.data;if(!data||data.saturnTV!==1)return;
+      if(win===win.top){
+        var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');
+        if(!frame||event.source!==frame.contentWindow||event.origin!=='https://play.saturncdn.net')return;
+        if(data.type==='fullscreen')fullscreen(frame);
+        else if(data.type==='key'&&[37,38,39,40,13,10009,406].indexOf(data.code)!==-1)handleKey({keyCode:data.code,repeat:!!data.repeat,target:frame,preventDefault:function(){},stopImmediatePropagation:function(){}});
+        else if(data.type==='keyup')api.releaseKey(data.code);
+      }else if(host==='play.saturncdn.net' && event.source===win.parent && event.origin==='https://www.animesaturn.net'){
+        if(data.type==='click'&&isFinite(data.x)&&isFinite(data.y)&&data.x>=0&&data.y>=0&&data.x<=win.innerWidth&&data.y<=win.innerHeight){
+          var el=doc.elementFromPoint(data.x,data.y);if(el){if(!activateFullscreen(el)){if(el.focus)el.focus();if(el.click)el.click();}}
+        }
+      }
+    });
     keyTarget.addEventListener('blur', stopMotion, true);
     scheduleScan();
     scan(doc);

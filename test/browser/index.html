@@ -1,6 +1,6 @@
-<!doctype html><html lang="it"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="frame-src 'self'"><title>Saturn TV 0.5.0 — collaudo</title>
+<!doctype html><html lang="it"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="frame-src 'self'"><title>Saturn TV 0.6.0 — collaudo</title>
 <style>body{background:#101820;color:#eef6ff;font:20px sans-serif;padding:32px}li{margin:10px}button,input{font:inherit;padding:12px}#results{max-width:78%}</style>
-<h1>Saturn TV 0.5.0 — collaudo</h1><p>Fixture locale dei comandi. Riproduzione e firmware Samsung da verificare sul dispositivo.</p>
+<h1>Saturn TV 0.6.0 — collaudo</h1><p>Fixture locale dei comandi. Riproduzione e firmware Samsung da verificare sul dispositivo.</p>
 <input type="search" name="keyword" aria-label="Ricerca di prova"><ul id="results"></ul>
 <script>sessionStorage.setItem("saturn-auto-overlay","1");localStorage.setItem("saturn-overlay-rules","[]");</script><script src="saturn-test.js"></script><script>
 (async function(){
@@ -8,7 +8,7 @@
  function check(label,ok){const li=document.createElement('li');li.textContent=(ok?'PASS — ':'FAIL — ')+label;li.style.color=ok?'#9aefb7':'#ff9a9a';results.appendChild(li);if(!ok)failures++;}
  function key(code,type='keydown'){const e=new KeyboardEvent(type,{keyCode:code,bubbles:true,cancelable:true});(document.activeElement||document).dispatchEvent(e);return e;}
  function action(name){return document.querySelector('[data-saturn-action="'+name+'"]');}
- check('Versione attiva',api.version==='0.5.0');key(10009);
+ check('Versione attiva',api.version==='0.6.0');key(10009);
  check('Menu rapido con nove comandi',document.querySelectorAll('#saturn-toolbar button').length===9);
  check('Black Clover 50 resta nel menu rapido',!!action('blackClover50'));
  action('settings').click();check('Impostazioni separate',!!action('speed')&&!action('search'));
@@ -30,7 +30,7 @@
  check('Cinema mantiene puntatore e uscita visibili',pointer.style.display!=='none'&&!!document.getElementById('saturn-cinema-controls'));
  key(10009);check('Indietro ripristina video e rimuove controlli',video.getAttribute('style')===style&&!document.getElementById('saturn-cinema-controls'));video.remove();
  api.status();action('settings').click();api.actions.speed();const speed=JSON.parse(localStorage.getItem('saturn-speed'));check('Velocità persistente',[350,500,700].includes(speed));
- api.actions.info();check('Versione e limite cache spiegati',document.querySelector('[role=status]').textContent.includes('0.5.0'));
+ api.actions.info();check('Versione e limite cache spiegati',document.querySelector('[role=status]').textContent.includes('0.6.0'));
  key(10009);check('Indietro da impostazioni torna al menu rapido',!!action('search'));key(10009);
  const summary=document.createElement('h2');summary.textContent=failures?failures+' verifiche fallite':'Tutte le verifiche browser superate';document.body.insertBefore(summary,results);
 })();

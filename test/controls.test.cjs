@@ -18,7 +18,7 @@ function fixture(saved, media) {
     click() { this.handlers.click.call(this, {preventDefault() {}, stopPropagation() {}}); }
   }
   doc = {title: 'Episodio 7', body: new Element('body'), addEventListener(k, f) { events[k] = f; }, querySelectorAll(selector) { return selector==='video' && media ? [media] : []; }, createElement(tag) { return new Element(tag); }};
-  const win = {document: doc, Node: Element, URL, Promise, location: {hostname: 'animesaturn.at', href: 'https://animesaturn.at/watch/show/ep-7', reload() { calls.push('reload'); }, assign(url) { calls.push(url); }}, history: {back() { calls.push('back'); }, forward() { calls.push('forward'); }}, sessionStorage: {getItem() {}, setItem() {}}, localStorage: {getItem(k) { return storage.get(k); }, setItem(k,v) { storage.set(k,v); }}, open() {}, setTimeout() {}};
+  const win = {document: doc, Node: Element, URL, Promise, location: {hostname: 'www.animesaturn.net', href: 'https://www.animesaturn.net/anime/show/ep-7', reload() { calls.push('reload'); }, assign(url) { calls.push(url); }}, history: {back() { calls.push('back'); }, forward() { calls.push('forward'); }}, sessionStorage: {getItem() {}, setItem() {}}, localStorage: {getItem(k) { return storage.get(k); }, setItem(k,v) { storage.set(k,v); }}, open() {}, setTimeout() {}};
   win.top = win;
   const api = install(win);
   function key(code) { events.keydown({keyCode: code, preventDefault() {}, stopImmediatePropagation() {}}); }
@@ -33,13 +33,13 @@ test('quick menu opens, settings refresh works, Back restores focus', () => {
 });
 test('browser navigation controls call history and canonical home', () => {
   const f = fixture(); f.api.actions.back(); f.api.actions.forward(); f.api.actions.home();
-  assert.deepEqual(f.calls, ['back', 'forward', 'https://animesaturn.at/']);
+  assert.deepEqual(f.calls, ['back', 'forward', 'https://www.animesaturn.net/']);
 });
 test('bookmark fallback can reopen saved page when no recent episode exists',()=>{
  const f=fixture();f.storage.delete('saturn-last');f.api.actions.save();f.api.actions.resume();assert.equal(f.calls[0],f.win.location.href);
 });
 test('invalid stored URLs cannot be resumed',()=>{
- for(const url of ['javascript:alert(1)','https://animesaturn.at.evil.test/','http://animesaturn.at/','https://user:password@animesaturn.at/']){
+ for(const url of ['javascript:alert(1)','https://www.animesaturn.net.evil.test/','http://www.animesaturn.net/','https://user:password@www.animesaturn.net/']){
   const f=fixture({url});f.storage.delete('saturn-last');f.key(406);assert.equal(f.buttons()[0].disabled,true);f.api.actions.resume();assert.equal(f.calls.length,0);
  }
 });
@@ -92,18 +92,18 @@ test('Black Clover shortcut in toolbar opens the verified episode 50', () => {
   const f=fixture(); f.key(10009);
   const shortcut=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='blackClover50');
   assert.equal(shortcut.textContent,'Black Clover · episodio 50');
-  shortcut.click();assert.deepEqual(f.calls,['https://animesaturn.at/watch/black-clover-jgswge/ep-50']);
+  shortcut.click();assert.deepEqual(f.calls,['https://www.animesaturn.net/anime/black-clover-67Dip/ep-50']);
 });
 
 test('favorites preserve multiple pages and reject unsafe stored links',()=>{
- const f=fixture();f.api.actions.addFavorite();f.win.location.href='https://animesaturn.at/watch/second/ep-1';f.api.actions.addFavorite();
+ const f=fixture();f.api.actions.addFavorite();f.win.location.href='https://www.animesaturn.net/anime/second/ep-1';f.api.actions.addFavorite();
  assert.equal(JSON.parse(f.storage.get('saturn-favorites')).length,2);
  f.storage.set('saturn-favorites',JSON.stringify([{url:'javascript:alert(1)',title:'bad'}]));f.api.actions.favorites();assert.equal(f.buttons().length,2);
 });
 test('speed preference is saved, next episode only follows real same-series links',()=>{
  const f=fixture();f.api.actions.speed();assert.equal(JSON.parse(f.storage.get('saturn-speed')),700);
- const links=['/watch/show/ep-6','/watch/show/ep-9','/watch/other/ep-8'];f.doc.querySelectorAll=()=>links.map(url=>({getAttribute(){return url;}}));
- f.api.actions.previousEpisode();f.api.actions.nextEpisode();assert.deepEqual(f.calls,['https://animesaturn.at/watch/show/ep-6','https://animesaturn.at/watch/show/ep-9']);
+ const links=['/anime/show/ep-6','/anime/show/ep-9','/anime/other/ep-8'];f.doc.querySelectorAll=()=>links.map(url=>({getAttribute(){return url;}}));
+ f.api.actions.previousEpisode();f.api.actions.nextEpisode();assert.deepEqual(f.calls,['https://www.animesaturn.net/anime/show/ep-6','https://www.animesaturn.net/anime/show/ep-9']);
 });
 
 test('accessible video progress is saved without persisting unrelated page data',()=>{
