@@ -1,4 +1,4 @@
-# Saturn TV 0.6.1
+# Saturn TV 0.6.2
 
 Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
 Il modulo non equivale a un browser completo o a uBlock Origin.
@@ -78,17 +78,17 @@ python3 -m http.server 8766 --bind 127.0.0.1 --directory test/.browser
 Aprire http://127.0.0.1:8766/ nel browser. La fixture modifica SOLO la propria copia
 del controllo dominio per consentire localhost; il modulo distribuito non lo accetta.
 La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
-27 test Node e 22 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
+31 test Node e 24 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
 player reale e pubblicità reale non sono sostituiti da questi test.
 
-`saturn.js` è la sorgente; `saturn-0.6.1.js` è la copia identica distribuita.
+`saturn.js` è la sorgente; `saturn-0.6.2.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets
 
 
 ## Migrazione al dominio ufficiale (.net)
 
-La versione 0.6.1 apre https://www.animesaturn.net/, indicato da
+La versione 0.6.2 apre https://www.animesaturn.net/, indicato da
 https://www.animesaturn.me/ nella lista dei domini. Il vecchio .at è escluso.
 Black Clover 50: https://www.animesaturn.net/anime/black-clover-67Dip/ep-50
 
@@ -111,7 +111,7 @@ Preferiti e progressi salvati su .at non sono trasferiti: l'origine e gli
 identificativi sono diversi. Non vengono cancellati o convertiti in URL inventati.
 
 
-## 0.6.1 — avvio lettore e selezione puntate
+## 0.6.2 — avvio lettore e selezione puntate
 
 OK nel player cross-origin non è più intercettato dal modulo: resta al lettore.
 Avvia video nel menu invia un comando play al player autorizzato e riporta l'esito
@@ -125,3 +125,20 @@ anche liste interne con overflow, come la lista degli episodi.
 Il canale aggiornabile usa ora saturn.js come entrypoint stabile. Nella release nuova
 saturn-0.6.0.js è un alias di compatibilità per metadati non ancora aggiornati. Il tag
 Git v0.6.0 resta immutato. La versione vera è sempre quella stampata dal modulo.
+
+
+## 0.6.2 — barra ridotta e uscita dal video
+
+Barra principale: sei pulsanti su due righe (Play/Pausa, Schermo intero, Puntate,
+Cerca, Black Clover 50, Altro). Altro separa le preferenze dagli Strumenti diagnostici.
+Indietro dal fullscreen/cinema richiede esplicitamente l'uscita e riapre la barra,
+anche tramite il bridge del player autorizzato. Non mette in pausa o ricarica il video.
+Il pulsante Esci da schermo intero della modalità cinema riporta alla barra.
+
+Per l'iframe ufficiale #watch-iframe, Schermo intero usa ora l'ingrandimento controllato
+nell'app: il viewport TV è già a tutto schermo, mentre Menu e puntatore restano
+raggiungibili. Se il lettore attiva comunque un fullscreen nativo, viene gestita
+l'uscita tramite API standard/WebKit quando disponibili. La consegna dei tasti dal
+firmware Samsung e l'iniezione nel player restano da verificare sul dispositivo.
+
+Verificati 31 test Node e 24 controlli browser per la 0.6.2, inclusa uscita da player ingrandito e riapertura della barra. La consegna dei tasti reali sulla Samsung resta da collaudare.

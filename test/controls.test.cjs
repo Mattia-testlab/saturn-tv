@@ -27,9 +27,9 @@ function fixture(saved, media) {
 }
 test('quick menu opens, settings refresh works, Back restores focus', () => {
  const f=fixture(), old={focus(){f.doc.activeElement=this;}};old.focus();f.key(406);
- assert.equal(f.buttons().length,10);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'resume');
- f.api.actions.settings();let reload=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='reload');reload.focus();f.key(13);assert.deepEqual(f.calls,['reload']);
- f.key(10009);assert.equal(f.buttons().length,10);f.key(10009);assert.equal(f.doc.body.children.length,0);
+ assert.equal(f.buttons().length,6);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'toggleVideo');
+ f.api.actions.settings();f.api.actions.tools();let reload=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='reload');reload.focus();f.key(13);assert.deepEqual(f.calls,['reload']);
+ f.key(10009);assert.equal(f.buttons().length,6);f.key(10009);assert.equal(f.doc.body.children.length,0);
 });
 test('browser navigation controls call history and canonical home', () => {
   const f = fixture(); f.api.actions.back(); f.api.actions.forward(); f.api.actions.home();
@@ -40,7 +40,7 @@ test('bookmark fallback can reopen saved page when no recent episode exists',()=
 });
 test('invalid stored URLs cannot be resumed',()=>{
  for(const url of ['javascript:alert(1)','https://www.animesaturn.net.evil.test/','http://www.animesaturn.net/','https://user:password@www.animesaturn.net/']){
-  const f=fixture({url});f.storage.delete('saturn-last');f.key(406);assert.equal(f.buttons()[0].disabled,true);f.api.actions.resume();assert.equal(f.calls.length,0);
+  const f=fixture({url});f.storage.delete('saturn-last');f.key(406);f.api.actions.settings();assert.equal(f.buttons().find(b=>b.getAttribute('data-saturn-action')==='resume').disabled,true);f.api.actions.resume();assert.equal(f.calls.length,0);
  }
 });
 test('storage failures produce feedback without navigating', () => {
@@ -50,11 +50,11 @@ test('storage failures produce feedback without navigating', () => {
 });
 test('Back opens and closes toolbar without navigating, but respects fullscreen and text fields', () => {
   const f = fixture();
-  f.key(10009); assert.equal(f.buttons().length, 10);
+  f.key(10009); assert.equal(f.buttons().length, 6);
   f.key(10009); assert.equal(f.doc.body.children.length, 0);
   assert.deepEqual(f.calls, []);
-  f.doc.fullscreenElement = {};
-  f.key(10009); assert.equal(f.doc.body.children.length, 0);
+  f.doc.fullscreenElement = {}; f.doc.exitFullscreen=()=>{f.doc.fullscreenElement=null;};
+  f.win.setTimeout=fn=>fn(); f.key(10009); assert.equal(f.buttons().length,6);f.key(10009);
   f.doc.fullscreenElement = null;
   f.doc.activeElement = {tagName: 'INPUT'};
   f.key(10009); assert.equal(f.doc.body.children.length, 0);
@@ -91,7 +91,7 @@ test('confirming search preserves submit and releases focus before moving cursor
 test('Black Clover shortcut in toolbar opens the verified episode 50', () => {
   const f=fixture(); f.key(10009);
   const shortcut=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='blackClover50');
-  assert.equal(shortcut.textContent,'Black Clover · episodio 50');
+  assert.equal(shortcut.textContent,'Black Clover · 50');
   shortcut.click();assert.deepEqual(f.calls,['https://www.animesaturn.net/anime/black-clover-67Dip/ep-50']);
 });
 

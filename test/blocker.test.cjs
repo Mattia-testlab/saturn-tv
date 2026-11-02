@@ -128,3 +128,10 @@ test('player play rejection is reported rather than silently ignored',async()=>{
  assert.match(reports[0].error,/NotAllowedError/);
  assert.equal(f.win.__saturnTV.enabled,false);
 });
+test('Back inside the trusted player exits native fullscreen and requests the parent menu',async()=>{
+ const f=fixture('play.saturncdn.net'),events={},messages=[];f.win.top={};f.win.parent={postMessage(data){messages.push(data);}};
+ f.win.addEventListener=(key,fn)=>events[key]=fn;
+ let exited=0;f.win.document.fullscreenElement={};f.win.document.exitFullscreen=()=>{exited++;f.win.document.fullscreenElement=null;return Promise.resolve();};
+ install(f.win);let stopped=false;events.keydown({keyCode:10009,preventDefault(){stopped=true;},stopImmediatePropagation(){}});
+ await Promise.resolve();assert.equal(exited,1);assert.equal(stopped,true);assert.equal(messages[0].type,'exitMenu');
+});
