@@ -95,3 +95,18 @@ Riferimenti: https://github.com/uBlockOrigin/uAssets e https://github.com/easyli
 - Verificati 20 test Node e 21 controlli su fixture in un browser reale, inclusi
   automatico/annulla, pressione continua/rilascio e fallback video/ripristino.
   La riproduzione e lo schermo intero nativo sulla Samsung richiedono prova fisica.
+
+## 0.4.1: rifinitura dei comandi video
+
+- Il clic su controlli fullscreen riconoscibili (Plyr, Video.js, JW Player, classi e
+  etichette fullscreen/schermo intero) usa il percorso nativo con fallback CSS anche
+  senza passare dalla barra. Riconosce le icone figlie del pulsante.
+- Il puntatore attraversa fino a cinque iframe dello stesso dominio; nei frame
+  esterni resta il limite della same-origin policy. Non promette supporto a pulsanti
+  senza etichette/classi riconoscibili o in player cross-origin.
+- Il movimento genera mousemove per rivelare i controlli dei player compatibili.
+- La barra mostra lo stato ON/OFF effettivo degli overlay e consente tre velocità:
+  lenta (350 px/s), media (500 px/s), veloce (700 px/s).
+- Verificati 20 test Node e 25 controlli browser su fixture, incluso clic sull'icona
+  di un pulsante fullscreen con rifiuto dell'API nativa e fallback CSS.
+  Il pulsante specifico di AnimeSaturn e la riproduzione sulla Samsung richiedono prova.

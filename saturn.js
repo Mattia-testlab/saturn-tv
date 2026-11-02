@@ -1,4 +1,4 @@
-/* Saturn TV 0.4.0 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.4.1 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.0'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.1'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -50,6 +50,7 @@
     try { Object.defineProperty(win, 'open', {configurable: true, get: function () { return guardedOpen; }, set: function () {}}); }
     catch (e) { win.open = guardedOpen; }
     function guardTarget(event) {
+      if (activateFullscreen(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
       if (!api.enabled) return;
       var node = event.target;
       while (node && node !== doc) {
@@ -154,7 +155,7 @@
       }).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src','style','class']});
     }
     var bar = null, buttons = [], previousFocus = null, message = null;
-    var hiddenOverlays = [], autoOverlay = true, cinema = null;
+    var hiddenOverlays = [], autoOverlay = true, cinema = null, cursorSpeed = 500;
     try { autoOverlay = win.sessionStorage.getItem('saturn-auto-overlay') !== '0'; } catch (e) {}
     function overlayCandidate(el) {
       if (!el || el === doc.body || el === doc.documentElement || !win.getComputedStyle || !el.getBoundingClientRect) return false;
@@ -192,6 +193,7 @@
       var item = hiddenOverlays.pop();
       if (!item) { tell('Nessuna rimozione da annullare.'); return; }
       if (item.style === null) item.element.removeAttribute('style'); else item.element.setAttribute('style',item.style);
+      refreshLabels();
       tell('Riquadro ripristinato. Rimozione automatica disattivata per questa sessione.');
     }
 
@@ -216,15 +218,19 @@
       if (cinema.style === null) cinema.el.removeAttribute('style'); else cinema.el.setAttribute('style',cinema.style);
       cinema = null; ensurePointer();
     }
-    function fullscreen() {
+    function fullscreen(preferred) {
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        var exit = doc.exitFullscreen || doc.webkitExitFullscreen; if (exit) exit.call(doc); return;
+      }
       if (cinema) { exitCinema(); return; }
       var nodes = doc.querySelectorAll('video,iframe[src*="/embed/"]'), best = null, area = 0;
       for (var i = 0; i < nodes.length; i++) {
         var rect = nodes[i].getBoundingClientRect(), a = rect.width * rect.height;
         if (a > area) { area = a; best = nodes[i]; }
       }
+      if (preferred && preferred.getBoundingClientRect) best = preferred;
       if (!best) { tell('Apri prima un episodio: nessun lettore riconosciuto.'); return; }
-      hideBar();
+      stopMotion(); hideBar();
       function fallback() {
         if (cinema) return;
         cinema = {el:best, style:best.getAttribute('style')};
@@ -241,11 +247,39 @@
         else win.setTimeout(function(){if (!doc.fullscreenElement && !doc.webkitFullscreenElement) fallback();},300);
       } catch(e) { fallback(); }
     }
+    function fullscreenControl(el) {
+      for (var n = 0; el && n < 7; n++, el = el.parentNode) {
+        if (!el.getAttribute) continue;
+        var label = (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '');
+        var cls = String(el.getAttribute('class') || '');
+        if (el.getAttribute('data-plyr') === 'fullscreen' ||
+            /(?:jw-icon-fullscreen|vjs-fullscreen-control|fullscreen-button|fullscreen-btn)/i.test(cls) ||
+            /full[ -]?screen|schermo intero|pieno schermo/i.test(label)) return true;
+      }
+      return false;
+    }
+    function activateFullscreen(el, frame) {
+      if (!fullscreenControl(el)) return false;
+      if (win !== win.top) {
+        try { win.top.__saturnTV.fullscreenFromPlayer(win.frameElement); } catch(e) { return false; }
+      } else fullscreen(frame);
+      return true;
+    }
+    api.fullscreenFromPlayer = fullscreen;
+    function refreshLabels() {
+      for (var i = 0; i < buttons.length; i++) {
+        var action = buttons[i].getAttribute('data-saturn-action');
+        if (action === 'autoOverlay') buttons[i].textContent = 'Overlay automatici: ' + (autoOverlay ? 'ON' : 'OFF');
+        if (action === 'speed') buttons[i].textContent = 'Cursore: ' + (cursorSpeed === 350 ? 'lento' : cursorSpeed === 500 ? 'medio' : 'veloce');
+      }
+    }
     api.actions = {
-      fullscreen: fullscreen,
+      fullscreen: function () { fullscreen(); },
+      speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; refreshLabels(); },
       autoOverlay: function () {
         autoOverlay = !autoOverlay;
         try { win.sessionStorage.setItem('saturn-auto-overlay', autoOverlay ? '1' : '0'); } catch(e) {}
+        refreshLabels();
         tell('Overlay automatici: ' + (autoOverlay ? 'attivi' : 'spenti'));
         if (autoOverlay) scheduleScan();
       },
@@ -295,7 +329,7 @@
       var stats = doc.createElement('p');
       stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
       bar.appendChild(stats);
-      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Chiudi barra', 'close']];
+      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Velocità cursore', 'speed'], ['Chiudi barra', 'close']];
       for (var i = 0; i < specs.length; i++) {
         var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
         btn.setAttribute('data-saturn-action', specs[i][1]);
@@ -309,7 +343,7 @@
       }
       message = doc.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
       message.textContent = 'Frecce: scegli · OK: esegui · Indietro o Blu: chiudi. Aggiorna e cambio filtro ricaricano la pagina: il minuto del video può andare perso.';
-      bar.appendChild(message); doc.body.appendChild(bar); buttons[0].focus(); ensurePointer();
+      bar.appendChild(message); doc.body.appendChild(bar); buttons[0].focus(); refreshLabels(); ensurePointer();
     }
     api.status = status;
     api.isBlocked = blocked;
@@ -337,15 +371,16 @@
     function pointerKey(code) {
       if (!ensurePointer()) return;
       if (code === 13) {
-        var el = doc.elementFromPoint(cursorX, cursorY);
-        if (el && el.tagName === 'IFRAME') {
-          // Same-origin frames only. Foreign players need their own native controls.
+        var el = doc.elementFromPoint(cursorX, cursorY), frame = null, hitX = cursorX, hitY = cursorY;
+        for (var depth = 0; el && el.tagName === 'IFRAME' && depth < 5; depth++) {
           try {
-            var rect = el.getBoundingClientRect();
-            el = el.contentDocument.elementFromPoint(cursorX - rect.left, cursorY - rect.top);
+            if (!frame) frame = el;
+            var rect = el.getBoundingClientRect(); hitX -= rect.left; hitY -= rect.top;
+            el = el.contentDocument.elementFromPoint(hitX, hitY);
           } catch (e) { return; }
         }
         if (el) {
+          if (activateFullscreen(el, frame)) return;
           var link = el;
           while (link && link !== doc && link.tagName !== 'A') link = link.parentNode;
           if (link && link.tagName === 'A' && link.getAttribute('href')) {
@@ -368,6 +403,16 @@
       cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
       cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
       ensurePointer();
+      if (doc.elementFromPoint && win.MouseEvent) {
+        try {
+          var hover = doc.elementFromPoint(cursorX,cursorY), x = cursorX, y = cursorY;
+          for (var depth=0; hover && hover.tagName === 'IFRAME' && depth<5; depth++) {
+            var box=hover.getBoundingClientRect(); x-=box.left; y-=box.top;
+            hover=hover.contentDocument.elementFromPoint(x,y);
+          }
+          if (hover) hover.dispatchEvent(new win.MouseEvent('mousemove',{bubbles:true,clientX:x,clientY:y}));
+        } catch(e) {}
+      }
     }
     function stopMotion() { held = {}; motionTime = 0; }
     function tick(time) {
@@ -377,7 +422,7 @@
       var dy = (held[40] ? 1 : 0) - (held[38] ? 1 : 0);
       if (!dx && !dy) { motionTime = 0; return; }
       var elapsed = motionTime ? Math.min(time - motionTime, 40) : 0; motionTime = time;
-      var distance = elapsed * 0.5 / (dx && dy ? 1.414 : 1);
+      var distance = elapsed * cursorSpeed / 1000 / (dx && dy ? 1.414 : 1);
       movePointer(dx * distance, dy * distance);
       motionFrame = win.requestAnimationFrame(tick);
     }

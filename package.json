@@ -1,12 +1,12 @@
 {
   "name": "saturn-tv-prototype",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Prototipo sperimentale per AnimeSaturn su TizenBrew",
   "packageType": "mods",
   "appName": "Saturn TV · prototipo",
   "websiteURL": "https://animesaturn.at/",
-  "main": "saturn-0.4.0.js",
+  "main": "saturn-0.4.1.js",
   "evaluateScriptOnDocumentStart": false,
   "keys": [
     "ColorF2Yellow",
