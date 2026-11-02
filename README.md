@@ -1,4 +1,4 @@
-# Saturn TV — prototipo 0.2.0
+# Saturn TV — prototipo 0.2.1
 
 Modulo scritto per TizenBrew, dedicato a https://animesaturn.at/.
 Destinazione prevista: Samsung UE50AU9070UXZT, firmware T-NKLADEUC-2310.0.
@@ -47,7 +47,7 @@ una prova di navigazione reale, riproduzione video o compatibilità Tizen.
 
 1. Installare TizenBrew secondo la guida originale, dopo autorizzazione all'installazione.
 2. Nel gestore moduli di TizenBrew scegliere Aggiungi modulo GitHub e inserire
-   `Mattia-testlab/saturn-tv@v0.2.0`. Il tag fissa la versione da collaudare.
+   `Mattia-testlab/saturn-tv@v0.2.1`. Il tag fissa la versione da collaudare.
    Non inserire l’URL completo né il prefisso `gh/`.
 3. Aggiungerlo come modulo e aprirlo. Il Mac serve per la preparazione/installazione;
    non è previsto un server Mac durante la visione. I file del modulo devono comunque

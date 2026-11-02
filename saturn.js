@@ -1,4 +1,4 @@
-/* Saturn TV 0.2.0 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.2.1 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.0'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.1'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
