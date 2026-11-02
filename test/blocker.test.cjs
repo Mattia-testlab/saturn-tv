@@ -70,3 +70,24 @@ test('XHR ad requests abort before sending; video requests are sent', () => {
   const video = new XHR(); video.open('GET', '/embed/as/video'); video.send();
   assert.equal(sent, 1);
 });
+test('ad scripts cannot overwrite window.open after the filter installs', () => {
+  const f = fixture(); const api=install(f.win);let hijacked=false;
+  f.win.open=()=>{hijacked=true;};
+  assert.equal(f.win.open('https://073m.com/afu.php'),null);
+  assert.equal(hijacked,false);assert.equal(api.popups,1);
+});
+test('programmatic form.submit blocks external ads while preserving same-site submission', () => {
+  const f=fixture();let submits=0;
+  function Form(action){this.action=action;}
+  Form.prototype.getAttribute=function(k){return k==='action'?this.action:'_self';};
+  Form.prototype.submit=function(){submits++;};f.win.HTMLFormElement=Form;
+  install(f.win);new Form('https://073m.com/afu.php').submit();assert.equal(submits,0);
+  new Form('/filter?keyword=naruto').submit();assert.equal(submits,1);
+});
+test('same-window external links are blocked but an episode link is preserved', () => {
+  const f=fixture();install(f.win);let blocked=0;
+  for(const href of ['https://073m.com/afu.php','https://animesaturn.at.evil.test/','/watch/test']){
+    f.handlers.click({target:{tagName:'A',getAttribute(k){return k==='href'?href:'_self';}},preventDefault(){blocked++;},stopImmediatePropagation(){}});
+  }
+  assert.equal(blocked,2);
+});

@@ -1,76 +1,66 @@
-# Saturn TV — prototipo 0.2.1
+# Saturn TV 0.3.0
 
-Modulo scritto per TizenBrew, dedicato a https://animesaturn.at/.
-Destinazione prevista: Samsung UE50AU9070UXZT, firmware T-NKLADEUC-2310.0.
-Compatibilità fisica e riproduzione sul televisore NON ancora verificate.
+Modulo sperimentale per AnimeSaturn su TizenBrew, pensato per Samsung UE50AU9070UXZT.
+Non è un browser completo e non equivale a uBlock Origin.
 
-## Che cosa contiene
+## Installazione e aggiornamenti
 
-- Blocca le chiamate a window.open e i link/form che aprono nuove finestre.
-- Filtra un piccolo elenco esplicito di domini pubblicitari, compreso il dominio
-  osservato durante l'ispezione del sito. Non usa liste complete EasyList/uBlock.
-- Filtra fetch, XHR e inserimenti dinamici di script/iframe riconosciuti.
-- Mantiene i normali collegamenti agli episodi e gli iframe video non bloccati.
-- Indietro oppure Blu apre/chiude la barra browser. In pieno schermo e nei campi di testo, Indietro resta al player o alla tastiera. Per la pagina precedente usare Indietro nella barra. Frecce selezionano, OK esegue, Indietro chiude.
-- Barra: Indietro, Avanti, Aggiorna, Home, Salva pagina, Riapri salvato, Filtro, Chiudi.
-- Salva pagina conserva un singolo collegamento sul dispositivo, non il minuto del video.
-- Giallo cambia protezione e ricarica:
-  prima mettere in pausa il video; la ricarica può perdere il punto di visione.
-- Nessuna nuova dipendenza, nessuna telemetria aggiunta dal modulo.
-  Il sito continua a effettuare le proprie richieste non filtrate.
+Nel gestore moduli TizenBrew scegliere Aggiungi modulo GitHub e inserire:
 
-## Limiti importanti
+```
+Mattia-testlab/saturn-tv
+```
 
-È codice sorgente di un prototipo, non un browser autonomo né un pacchetto WGT/TPK
-già installabile. Richiede TizenBrew e una modalità di distribuzione del modulo.
-Distribuzione GitHub: `Mattia-testlab/saturn-tv`. Lo ZIP non si installa semplicemente via USB.
+Non aggiungere un tag se si desiderano gli aggiornamenti. Riavviare completamente
+TizenBrew/TV per svuotare la cache del codice del servizio. La barra e il pulsante
+Menu mostrano la versione effettivamente eseguita. GitHub/jsDelivr possono avere cache.
+Il Mac non deve rimanere acceso; è necessaria la connessione Internet.
 
-I filtri JavaScript non equivalgono a un filtro di rete: gli script caricati dal
-parser prima dell'iniezione possono essere già stati eseguiti. La rimozione DOM
-successiva non annulla richieste o codice già eseguiti. Non intercetta in modo
-universale location.href/location.replace, redirect HTTP o frame su altri domini.
-L'iniezione all'avvio documento è richiesta nei metadati ma va verificata sul firmware.
-I link legittimi in nuova finestra sono bloccati anch'essi: Giallo disattiva il filtro.
-Non aggira DRM, autenticazione, blocchi di accesso o restrizioni geografiche.
+## Comandi
 
-## Verifica locale
+- Frecce: muovono il cursore; ai bordi superiore/inferiore scorrono la pagina.
+- OK: attiva l'elemento sotto il cursore. I link del sito sono aperti direttamente.
+- Indietro o Blu: aprono/chiudono la barra.
+- Menu in basso a destra: apre la barra anche senza tasto colorato.
+- Nella barra: frecce per selezionare, OK per eseguire.
+- Dopo OK nella ricerca, il campo perde il focus dopo l'evento, preservando l'invio.
+- Indietro nei campi di testo lascia chiudere la tastiera e rilascia il focus.
+- In pieno schermo i tasti sono lasciati al player. Home del telecomando resta di sistema.
+- Pagina precedente: pulsante Indietro nella barra.
+- Salva pagina conserva un collegamento, non il minuto del video.
 
-Con Node.js già disponibile, nella cartella del progetto:
+## Protezioni
 
-    node --check saturn.js
-    node --test test/*.test.cjs
+Blocca window.open, impedisce che venga sostituito con semplice assegnazione,
+blocca link/form verso domini esterni e nuove finestre quando il filtro è attivo.
+Protegge anche form.submit(), che non genera un evento submit.
+Filtra script, iframe, fetch e XHR di un elenco limitato di domini pubblicitari.
+L'elenco include subsignsodaic.com e 073m.com osservati durante l'ispezione del sito.
+Rimuove il wrapper fisso immediato di un iframe identificato come pubblicitario
+soltanto se non contiene altri iframe, audio o video.
+Non rimuove genericamente dialoghi, codici QR, CAPTCHA o player.
 
-I test verificano comportamento delle funzioni in un ambiente simulato. Non sono
-una prova di navigazione reale, riproduzione video o compatibilità Tizen.
+## Limiti e stato reale
 
-## Prossimo passaggio sul televisore
+- Un annuncio già eseguito prima dell'iniezione può sfuggire al filtro.
+- Nessuna intercettazione universale di location.href, redirect HTTP o richieste di rete.
+- La modalità document-start è disabilitata: il percorso TizenBrew esaminato presenta
+  una discordanza fra nome semplice/fullName nel messaggio di avvio.
+- Il cursore genera clic sintetici: alcuni player li rifiutano. I frame di altri domini
+  non sono controllabili; nei frame dello stesso dominio i tasti sono inoltrati al modulo principale.
+- I link esterni legittimi sono bloccati quando il filtro è attivo.
+- La finestra QR con conto alla rovescia segnalata sulla TV non è stata riprodotta
+  esattamente sul Mac: la sua eliminazione NON è ancora dimostrata.
+- Verificati 20 test Node e 12 controlli DOM in un browser reale su fixture locale.
+  Questi non dimostrano compatibilità con la tastiera Tizen o riproduzione video reale.
 
-1. Installare TizenBrew secondo la guida originale, dopo autorizzazione all'installazione.
-2. Nel gestore moduli di TizenBrew scegliere Aggiungi modulo GitHub e inserire
-   `Mattia-testlab/saturn-tv@v0.2.1`. Il tag fissa la versione da collaudare.
-   Non inserire l’URL completo né il prefisso `gh/`.
-3. Aggiungerlo come modulo e aprirlo. Il Mac serve per la preparazione/installazione;
-   non è previsto un server Mac durante la visione. I file del modulo devono comunque
-   essere raggiungibili tramite il canale di distribuzione configurato in TizenBrew.
-4. Provare un episodio: avvio, pausa, pieno schermo, episodio successivo, Indietro.
-5. Ripetere le interazioni che prima aprivano pubblicità. Controllare il contatore Blu.
-   Se il video non parte, provare Giallo e confrontare. Non dichiarare il progetto
-   funzionante finché questa verifica non è completata sul dispositivo.
+## Test
 
-Riferimento formato moduli: https://github.com/reisxd/TizenBrew/blob/main/docs/MODULES.md
+```
+node --check saturn.js
+node --test test/*.test.cjs
+```
 
-Questo è il primo filtro sperimentale. Non promette eliminazione di ogni pubblicità
-e non modifica il browser Samsung, il firmware o le altre app del televisore.
-
-## Versione 0.2.3
-
-Cursore simulato: frecce per muoverlo, OK per cliccare, scorrimento ai bordi verticali.
-I clic sintetici non equivalgono a un mouse fisico e possono essere rifiutati dai player.
-I riquadri di altri domini non sono controllabili. In pieno schermo e nei campi di testo
-i tasti restano al sito. La barra mostra la versione effettivamente in esecuzione.
-
-## Versione 0.2.4
-
-Dopo Invio/OK in un campo input, rilascia il focus al termine dell’evento per
-ripristinare il cursore senza annullare l’invio del modulo. Indietro nel campo
-lascia chiudere la tastiera e rilascia il focus. Da verificare sulla tastiera fisica della TV.
+`saturn.js` è la sorgente; `saturn-0.3.0.js` è la copia identica distribuita.
+I file versionati precedenti restano per i tag già pubblicati.
+Nessuna dipendenza o telemetria aggiunta dal modulo; il sito mantiene le proprie richieste non filtrate.

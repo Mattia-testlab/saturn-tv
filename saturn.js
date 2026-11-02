@@ -1,9 +1,9 @@
-/* Saturn TV 0.2.4 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.3.0 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
     'subsignsodaic.com', 'doubleclick.net', 'googlesyndication.com',
-    'adsterra.com', 'popads.net', 'popcash.net'
+    'adsterra.com', 'popads.net', 'popcash.net', '073m.com'
   ];
   function hostBlocked(host) {
     host = String(host || '').toLowerCase().replace(/\.$/, '');
@@ -21,12 +21,19 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.4'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.3.0'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
       try { return api.enabled && hostBlocked(new win.URL(String(url), win.location.href).hostname); }
       catch (e) { return false; }
+    }
+    function allowedNavigation(url) {
+      try {
+        var u = new win.URL(String(url), win.location.href);
+        return (u.protocol === 'https:' || u.protocol === 'http:') &&
+          (u.hostname === 'animesaturn.at' || /\.animesaturn\.at$/.test(u.hostname));
+      } catch (e) { return false; }
     }
     function resource(el) {
       return el && /^(SCRIPT|IFRAME)$/.test(el.tagName) && blocked(el.getAttribute('src') || '');
@@ -34,11 +41,14 @@
     // Block all new-window requests on this site while protection is enabled.
     // Existing-page location changes cannot all be intercepted this way.
     var originalOpen = win.open;
-    win.open = function () {
+    var guardedOpen = function () {
       if (!api.enabled) return originalOpen.apply(win, arguments);
       api.popups++;
       return null;
     };
+    // Stop advertising scripts replacing our window.open hook after installation.
+    try { Object.defineProperty(win, 'open', {configurable: true, get: function () { return guardedOpen; }, set: function () {}}); }
+    catch (e) { win.open = guardedOpen; }
     function guardTarget(event) {
       if (!api.enabled) return;
       var node = event.target;
@@ -46,7 +56,7 @@
         if (node.tagName === 'A' || node.tagName === 'FORM') {
           var target = String(node.getAttribute('target') || '').toLowerCase();
           var url = node.getAttribute(node.tagName === 'A' ? 'href' : 'action');
-          if (blocked(url || '') || (target && target !== '_self' && target !== '_parent' && target !== '_top')) {
+          if (blocked(url || '') || (url && !allowedNavigation(url)) || (target && target !== '_self' && target !== '_parent' && target !== '_top')) {
             event.preventDefault(); event.stopImmediatePropagation(); api.popups++;
           }
           return;
@@ -54,9 +64,18 @@
         node = node.parentNode;
       }
     }
-    doc.addEventListener('click', guardTarget, true);
+    (win.addEventListener ? win : doc).addEventListener('click', guardTarget, true);
     doc.addEventListener('auxclick', guardTarget, true);
     doc.addEventListener('submit', guardTarget, true);
+    if (win.HTMLFormElement) {
+      var formProto = win.HTMLFormElement.prototype, submit = formProto.submit;
+      formProto.submit = function () {
+        var dest = this.getAttribute('action') || win.location.href;
+        var target = this.getAttribute('target') || '_self';
+        if (api.enabled && (!allowedNavigation(dest) || target === '_blank')) { api.popups++; return; }
+        return submit.apply(this, arguments);
+      };
+    }
     // Hooks cover dynamic insertion; they do not stop every parser-loaded script.
     var proto = win.Node.prototype;
     var append = proto.appendChild;
@@ -98,7 +117,17 @@
       var nodes = container.querySelectorAll('script[src],iframe[src]');
       for (var i = 0; i < nodes.length; i++) {
         var node = nodes[i];
-        if (resource(node) && node.parentNode) { node.parentNode.removeChild(node); api.resources++; }
+        if (resource(node) && node.parentNode) {
+          var remove = node;
+          if (node.tagName === 'IFRAME' && win.getComputedStyle) {
+            var parent = node.parentNode;
+            // Only the immediate fixed wrapper of an identified advertising iframe.
+            if (parent !== doc.body && parent !== doc.documentElement && parent.querySelectorAll &&
+                win.getComputedStyle(parent).position === 'fixed' &&
+                parent.querySelectorAll('video,audio,iframe').length === 1) remove = parent;
+          }
+          remove.parentNode.removeChild(remove); api.resources++;
+        }
         else if (node.tagName === 'IFRAME') {
           try { install(node.contentWindow); } catch (e) {}
         }
@@ -161,12 +190,14 @@
     function hideBar() {
       if (!bar) return;
       bar.parentNode.removeChild(bar); bar = null; buttons = []; message = null;
+      ensurePointer();
       try { if (previousFocus && previousFocus.focus) previousFocus.focus(); } catch (e) {}
     }
     function status() {
       if (win !== win.top || !doc.body) return;
       if (bar) { hideBar(); return; }
       previousFocus = doc.activeElement;
+      if (previousFocus && /^(INPUT|TEXTAREA|SELECT)$/.test(previousFocus.tagName)) previousFocus = null;
       bar = doc.createElement('section');
       bar.id = 'saturn-toolbar'; bar.setAttribute('aria-label', 'Comandi Saturn TV');
       bar.style.cssText = 'position:fixed;top:3vh;left:3vw;right:3vw;z-index:2147483647;background:#101820;color:#f4f7fa;padding:24px;box-shadow:0 12px 32px #0008;font:22px/1.4 sans-serif;text-align:left;max-height:88vh;overflow:auto;box-sizing:border-box';
@@ -191,11 +222,11 @@
       }
       message = doc.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
       message.textContent = 'Frecce: scegli · OK: esegui · Indietro o Blu: chiudi. Aggiorna e cambio filtro ricaricano la pagina: il minuto del video può andare perso.';
-      bar.appendChild(message); doc.body.appendChild(bar); buttons[0].focus();
+      bar.appendChild(message); doc.body.appendChild(bar); buttons[0].focus(); ensurePointer();
     }
     api.status = status;
     api.isBlocked = blocked;
-    var pointer = null, cursorX = 0, cursorY = 0;
+    var pointer = null, cursorX = 0, cursorY = 0, menuButton = null;
     function ensurePointer() {
       if (win !== win.top || !doc.body || !doc.elementFromPoint || !win.innerWidth) return false;
       if (!pointer) {
@@ -204,9 +235,16 @@
         pointer.textContent = '➤'; pointer.setAttribute('aria-hidden', 'true');
         pointer.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;color:#fff;font:36px sans-serif;text-shadow:0 0 4px #000,2px 2px 2px #000;transform:rotate(-35deg);line-height:1';
         doc.body.appendChild(pointer);
+        menuButton = doc.createElement('button'); menuButton.type = 'button';
+        menuButton.id = 'saturn-menu'; menuButton.textContent = '☰ Menu · ' + api.version;
+        menuButton.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:2147483645;padding:12px 18px;background:#101820;color:white;border:2px solid #8cdeff;border-radius:8px;font:20px sans-serif';
+        menuButton.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); status(); });
+        doc.body.appendChild(menuButton);
       }
       pointer.style.left = cursorX + 'px'; pointer.style.top = cursorY + 'px';
-      pointer.style.display = bar ? 'none' : 'block';
+      var hidden = bar || doc.fullscreenElement || doc.webkitFullscreenElement;
+      pointer.style.display = hidden ? 'none' : 'block';
+      if (menuButton) menuButton.style.display = hidden ? 'none' : 'block';
       return true;
     }
     function pointerKey(code) {
@@ -220,7 +258,17 @@
             el = el.contentDocument.elementFromPoint(cursorX - rect.left, cursorY - rect.top);
           } catch (e) { return; }
         }
-        if (el) { if (el.focus) el.focus(); if (el.click) el.click(); }
+        if (el) {
+          var link = el;
+          while (link && link !== doc && link.tagName !== 'A') link = link.parentNode;
+          if (link && link.tagName === 'A' && link.getAttribute('href')) {
+            var href = link.getAttribute('href');
+            if (allowedNavigation(href)) win.location.assign(new win.URL(href, win.location.href).href);
+            else api.popups++;
+            return;
+          }
+          if (el.focus) el.focus(); if (el.click) el.click();
+        }
       } else {
         var dx = code === 37 ? -28 : code === 39 ? 28 : 0;
         var dy = code === 38 ? -28 : code === 40 ? 28 : 0;
@@ -233,17 +281,22 @@
     }
     ensurePointer();
     doc.addEventListener('DOMContentLoaded', ensurePointer);
+    doc.addEventListener('fullscreenchange', ensurePointer);
+    doc.addEventListener('webkitfullscreenchange', ensurePointer);
     // Window capture runs before site handlers attached to document.
     var keyTarget = win.addEventListener ? win : doc;
-    keyTarget.addEventListener('keydown', function (event) {
-      if (win !== win.top) return;
+    function handleKey(event) {
+      if (win !== win.top) {
+        try { if (win.top.__saturnTV && win.top.__saturnTV.handleKey) win.top.__saturnTV.handleKey(event); } catch (e) {}
+        return;
+      }
       var code = event.keyCode;
       // Let the player and on-screen keyboard handle Back in their own contexts.
       var target = event.target || doc.activeElement;
       if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
           (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)))) {
         if (target && target.tagName === 'INPUT') win.setTimeout(function () {
-          if (doc.activeElement === target && target.blur) target.blur();
+          if ((target.ownerDocument || doc).activeElement === target && target.blur) target.blur();
         }, 0);
         return;
       }
@@ -252,7 +305,7 @@
       // Do not run for the Enter that initially clicks into a field.
       if (!bar && editing && code === 13 && target.tagName === 'INPUT') {
         win.setTimeout(function () {
-          if (doc.activeElement === target && target.blur) target.blur();
+          if ((target.ownerDocument || doc).activeElement === target && target.blur) target.blur();
           ensurePointer();
         }, 0);
         return;
@@ -275,7 +328,9 @@
           }
         }
       }
-    }, true);
+    }
+    api.handleKey = handleKey;
+    keyTarget.addEventListener('keydown', handleKey, true);
     scan(doc);
     return api;
   }
