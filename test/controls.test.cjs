@@ -124,3 +124,17 @@ test('cursor scrolls an internal episode list at its edge',()=>{
  f.win.getComputedStyle=()=>({overflowY:'auto'});f.doc.elementFromPoint=()=>list;
  f.key(40);assert.ok(list.scrollTop>0);
 });
+test('cursor forwards frame-local hover then click to the trusted cross-origin player',()=>{
+ const f=fixture(),messages=[];f.win.innerWidth=1280;f.win.innerHeight=720;f.win.MouseEvent=function(){};
+ const frame={tagName:'IFRAME',id:'watch-iframe',src:'https://play.saturncdn.net/embed/176',getBoundingClientRect(){return{left:100,top:50};},get contentDocument(){throw Error('SecurityError');},contentWindow:{postMessage(data,origin){messages.push({data,origin});}}};
+ f.doc.elementFromPoint=()=>frame;f.key(39);f.key(13);
+ assert.deepEqual(messages.map(m=>[m.data.type,m.data.x,m.data.y,m.origin]),[['move',568,310,'https://play.saturncdn.net'],['click',568,310,'https://play.saturncdn.net']]);
+ frame.src='https://evil.test/embed/176';messages.length=0;f.key(39);f.key(13);assert.equal(messages.length,0);
+});
+test('remote play/pause key sends one command and ignores key repeats',()=>{
+ const f=fixture(),messages=[];
+ const frame={src:'https://play.saturncdn.net/embed/176',contentWindow:{postMessage(data){messages.push(data);}}};
+ f.doc.querySelector=()=>frame;f.key(10252);f.key(19);f.key(415);
+ f.events.keydown({keyCode:10252,repeat:true,preventDefault(){},stopImmediatePropagation(){}});
+ assert.deepEqual(messages.map(m=>m.type),['toggle','pause','play']);
+});

@@ -1,4 +1,4 @@
-# Saturn TV 0.6.2
+# Saturn TV 0.6.3
 
 Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
 Il modulo non equivale a un browser completo o a uBlock Origin.
@@ -13,8 +13,8 @@ Mattia-testlab/saturn-tv
 
 I nomi con `@v...` restano fissi a quella versione. Il Mac può rimanere spento durante
 l'uso, ma occorre Internet per scaricare il modulo. Le cache GitHub/jsDelivr e del
-servizio TizenBrew possono ritardare gli aggiornamenti. Impostazioni → Versione e
-aggiornamenti mostra la versione realmente in esecuzione; non promette un aggiornamento
+servizio TizenBrew possono ritardare gli aggiornamenti. Altro → Strumenti → Versione
+attiva mostra la versione realmente in esecuzione; non promette un aggiornamento
 forzato. Il riavvio della pagina non svuota necessariamente la cache del servizio.
 
 ## Barra e telecomando
@@ -22,8 +22,7 @@ forzato. Il riavvio della pagina non svuota necessariamente la cache del servizi
 - Indietro o Blu aprono la barra; dal menu principale la richiudono.
 - Indietro nelle impostazioni/preferiti riporta al menu principale.
 - Frecce nella barra seguono la disposizione visiva dei pulsanti; OK esegue.
-- Menu rapido: Riprendi, Cerca, puntata precedente/successiva, Schermo intero,
-  Preferiti, Black Clover episodio 50, Impostazioni, Chiudi.
+- Menu rapido: Play / Pausa, Schermo intero, Puntate, Cerca, Black Clover 50, Altro.
 - Le puntate adiacenti si ricavano dai link realmente presenti per la serie corrente;
   senza link il relativo comando è disabilitato. Non vengono inventati URL.
 - Riprendi conserva automaticamente l'ultima pagina /anime/.../ep-.... Se il video è accessibile,
@@ -78,17 +77,17 @@ python3 -m http.server 8766 --bind 127.0.0.1 --directory test/.browser
 Aprire http://127.0.0.1:8766/ nel browser. La fixture modifica SOLO la propria copia
 del controllo dominio per consentire localhost; il modulo distribuito non lo accetta.
 La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
-31 test Node e 24 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
+36 test Node e 33 verifiche browser eseguite localmente (27 generali e 6 su due origini separate). Firmware, tastiera Samsung,
 player reale e pubblicità reale non sono sostituiti da questi test.
 
-`saturn.js` è la sorgente; `saturn-0.6.2.js` è la copia identica distribuita.
+`saturn.js` è la sorgente; `saturn-0.6.3.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets
 
 
 ## Migrazione al dominio ufficiale (.net)
 
-La versione 0.6.2 apre https://www.animesaturn.net/, indicato da
+Dalla versione 0.6.0 il modulo apre https://www.animesaturn.net/, indicato da
 https://www.animesaturn.me/ nella lista dei domini. Il vecchio .at è escluso.
 Black Clover 50: https://www.animesaturn.net/anime/black-clover-67Dip/ep-50
 
@@ -122,9 +121,10 @@ Il comando trasmette al player anche lo stato del filtro per il confronto diagno
 Il cursore risale dalle icone SVG al pulsante/collegamento contenitore e scorre
 anche liste interne con overflow, come la lista degli episodi.
 
-Il canale aggiornabile usa ora saturn.js come entrypoint stabile. Nella release nuova
-saturn-0.6.0.js è un alias di compatibilità per metadati non ancora aggiornati. Il tag
-Git v0.6.0 resta immutato. La versione vera è sempre quella stampata dal modulo.
+La release attuale usa un file JS con nome nuovo per evitare la cache del codice.
+I file saturn-0.6.0.js, saturn-0.6.1.js e saturn-0.6.2.js sul ramo aggiornabile sono
+alias di compatibilità per metadati vecchi; i tag Git già pubblicati restano immutati.
+La versione vera è sempre quella stampata dal modulo.
 
 
 ## 0.6.2 — barra ridotta e uscita dal video
@@ -142,3 +142,30 @@ l'uscita tramite API standard/WebKit quando disponibili. La consegna dei tasti d
 firmware Samsung e l'iniezione nel player restano da verificare sul dispositivo.
 
 Verificati 31 test Node e 24 controlli browser per la 0.6.2, inclusa uscita da player ingrandito e riapertura della barra. La consegna dei tasti reali sulla Samsung resta da collaudare.
+
+
+## 0.6.3 — controlli durante la riproduzione
+
+Il movimento del cursore ora attraversa il bridge del player ufficiale (massimo 25
+aggiornamenti al secondo), con coordinate locali e verifica di origine e finestra.
+Il player riceve mousemove per mostrare i propri controlli. Dopo aver attivato il
+cursore o un comando video, OK torna al puntatore: il focus nell’iframe non impedisce
+più di cliccare il punto indicato. Prima di ciò OK resta disponibile al player nativo.
+
+Nell’ingrandimento controllato compaiono −10 s, Play / Pausa, +10 s ed Esci da schermo
+intero anche con video cross-origin. Si nascondono dopo 3,5 secondi e ricompaiono
+muovendo la freccia; Menu resta raggiungibile. Indietro esce e apre la barra principale.
+I salti preservano la pausa e si fermano ai limiti del video; con durata non ancora
+disponibile viene mostrato un errore. I tasti media supportati vengono registrati
+quando le API Tizen lo permettono; i pulsanti restano l’alternativa disponibile.
+
+Per aggiornare dalla 0.6.0 con il nome senza @v, tenere premuto Accensione fino al
+logo Samsung, quindi aprire TizenBrew e il modulo. Non basta Aggiorna pagina.
+Il codice ufficiale TizenBrew conserva il JS in una Map indicizzata per nome modulo
+per tutta la vita del servizio: utils/debugger.js. Il numero della scheda può riferirsi
+ai metadati; controllare Altro → Strumenti → Versione attiva nel modulo.
+
+Prova del bridge nel browser: /bridge.html della fixture locale, con origini distinte
+127.0.0.1 e localhost sulla porta 8766. Confermati movimento, clic e uscita dal video
+tra contesti reali. Il player è simulato: non dimostra che JW Player o il firmware
+Samsung reagiscano allo stesso modo. La verifica conclusiva resta sulla TV.

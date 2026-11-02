@@ -57,6 +57,11 @@ test('installation is idempotent and yellow reloads for a clean toggle', () => {
   f.handlers.keydown({keyCode: 405, preventDefault() {}, stopImmediatePropagation() {}});
   assert.equal(f.counts().reloaded, 1);
 });
+test('registers only supported media keys and tolerates unavailable Tizen privileges',()=>{
+ const f=fixture(),registered=[];
+ f.win.tizen={tvinputdevice:{getSupportedKeys(){return[{name:'MediaPlay'},{name:'MediaPause'},{name:'MediaPlayPause'},{name:'VolumeUp'}];},registerKey(name){registered.push(name);if(name==='MediaPause')throw Error('Denied');}}};
+ assert.ok(install(f.win));assert.deepEqual(registered,['MediaPlay','MediaPause','MediaPlayPause']);
+});
 test('XHR ad requests abort before sending; video requests are sent', () => {
   const f = fixture(); let sent = 0, aborted = 0;
   function XHR() {}
@@ -134,4 +139,29 @@ test('Back inside the trusted player exits native fullscreen and requests the pa
  let exited=0;f.win.document.fullscreenElement={};f.win.document.exitFullscreen=()=>{exited++;f.win.document.fullscreenElement=null;return Promise.resolve();};
  install(f.win);let stopped=false;events.keydown({keyCode:10009,preventDefault(){stopped=true;},stopImmediatePropagation(){}});
  await Promise.resolve();assert.equal(exited,1);assert.equal(stopped,true);assert.equal(messages[0].type,'exitMenu');
+});
+test('player hover is authenticated and Enter follows the remote pointer after movement',()=>{
+ const f=fixture('play.saturncdn.net'),events={},messages=[],moves=[];
+ const parent={postMessage(data){messages.push(data);}};
+ f.win.parent=parent;f.win.top=new Proxy({},{get(){throw Error('SecurityError');}});
+ f.win.innerWidth=640;f.win.innerHeight=360;f.win.MouseEvent=function(type,data){this.type=type;Object.assign(this,data);};
+ f.win.addEventListener=(key,fn)=>events[key]=fn;
+ f.win.document.elementFromPoint=()=>({dispatchEvent(event){moves.push(event);}});install(f.win);
+ const enter=()=>events.keydown({keyCode:13,preventDefault(){},stopImmediatePropagation(){}});
+ enter();assert.equal(messages.length,0); // Native Enter still starts an untouched player.
+ const move=(origin,source,x)=>events.message({origin,source,data:{saturnTV:1,type:'move',x,y:40}});
+ move('https://evil.test',parent,10);move('https://www.animesaturn.net',{},10);move('https://www.animesaturn.net',parent,900);move('https://www.animesaturn.net',parent,'10');assert.equal(moves.length,0);
+ move('https://www.animesaturn.net',parent,10);assert.equal(moves[0].type,'mousemove');assert.equal(moves[0].clientY,40);
+ enter();assert.deepEqual(messages[0],{saturnTV:1,type:'key',code:13,repeat:false});
+});
+test('player seek clamps to video bounds, preserves pause and rejects unauthenticated commands',()=>{
+ const f=fixture('play.saturncdn.net'),events={},reports=[],parent={postMessage(data){reports.push(data);}};
+ const video={duration:60,currentTime:4,paused:false,readyState:4,pause(){this.paused=true;}};
+ f.win.top={};f.win.parent=parent;f.win.addEventListener=(key,fn)=>events[key]=fn;f.win.document.querySelector=()=>video;install(f.win);
+ const command=(type,origin='https://www.animesaturn.net')=>events.message({source:parent,origin,data:{saturnTV:1,type}});
+ command('seekForward','https://evil.test');assert.equal(video.currentTime,4);assert.equal(reports.length,0);
+ command('seekBack');assert.equal(video.currentTime,0);assert.equal(video.paused,false);
+ video.currentTime=58;command('seekForward');assert.equal(video.currentTime,60);
+ command('pause');assert.equal(video.paused,true);
+ video.duration=NaN;command('seekBack');assert.match(reports.at(-1).error,/caricamento/);
 });
