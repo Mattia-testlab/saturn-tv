@@ -110,3 +110,8 @@ Riferimenti: https://github.com/uBlockOrigin/uAssets e https://github.com/easyli
 - Verificati 20 test Node e 25 controlli browser su fixture, incluso clic sull'icona
   di un pulsante fullscreen con rifiuto dell'API nativa e fallback CSS.
   Il pulsante specifico di AnimeSaturn e la riproduzione sulla Samsung richiedono prova.
+
+## 0.4.2
+
+Aggiunto nella barra il collegamento Black Clover · episodio 50. URL verificato
+nella lista episodi pubblica: https://animesaturn.at/watch/black-clover-jgswge/ep-50

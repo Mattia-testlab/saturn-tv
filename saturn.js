@@ -1,4 +1,4 @@
-/* Saturn TV 0.4.1 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.4.2 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.1'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.2'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -274,6 +274,7 @@
       }
     }
     api.actions = {
+      blackClover50: function () { win.location.assign('https://animesaturn.at/watch/black-clover-jgswge/ep-50'); },
       fullscreen: function () { fullscreen(); },
       speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; refreshLabels(); },
       autoOverlay: function () {
@@ -329,7 +330,7 @@
       var stats = doc.createElement('p');
       stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
       bar.appendChild(stats);
-      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Velocità cursore', 'speed'], ['Chiudi barra', 'close']];
+      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Velocità cursore', 'speed'], ['Black Clover · episodio 50', 'blackClover50'], ['Chiudi barra', 'close']];
       for (var i = 0; i < specs.length; i++) {
         var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
         btn.setAttribute('data-saturn-action', specs[i][1]);
