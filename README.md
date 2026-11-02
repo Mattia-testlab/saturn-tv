@@ -1,4 +1,4 @@
-# Saturn TV 0.6.0
+# Saturn TV 0.6.1
 
 Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
 Il modulo non equivale a un browser completo o a uBlock Origin.
@@ -81,14 +81,14 @@ La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
 27 test Node e 22 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
 player reale e pubblicità reale non sono sostituiti da questi test.
 
-`saturn.js` è la sorgente; `saturn-0.6.0.js` è la copia identica distribuita.
+`saturn.js` è la sorgente; `saturn-0.6.1.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets
 
 
 ## Migrazione al dominio ufficiale (.net)
 
-La versione 0.6.0 apre https://www.animesaturn.net/, indicato da
+La versione 0.6.1 apre https://www.animesaturn.net/, indicato da
 https://www.animesaturn.me/ nella lista dei domini. Il vecchio .at è escluso.
 Black Clover 50: https://www.animesaturn.net/anime/black-clover-67Dip/ep-50
 
@@ -109,3 +109,19 @@ segnalibri, puntate adiacenti, ripresa, fullscreen e il pulsante Black Clover.
 
 Preferiti e progressi salvati su .at non sono trasferiti: l'origine e gli
 identificativi sono diversi. Non vengono cancellati o convertiti in URL inventati.
+
+
+## 0.6.1 — avvio lettore e selezione puntate
+
+OK nel player cross-origin non è più intercettato dal modulo: resta al lettore.
+Avvia video nel menu invia un comando play al player autorizzato e riporta l'esito
+della Promise. Stato lettore nelle impostazioni distingue mancata risposta, video
+non creato, video in pausa, errore e riproduzione. Non garantisce di risolvere codec,
+rete, sintassi del player o richieste di attivazione utente del firmware.
+Il comando trasmette al player anche lo stato del filtro per il confronto diagnostico.
+Il cursore risale dalle icone SVG al pulsante/collegamento contenitore e scorre
+anche liste interne con overflow, come la lista degli episodi.
+
+Il canale aggiornabile usa ora saturn.js come entrypoint stabile. Nella release nuova
+saturn-0.6.0.js è un alias di compatibilità per metadati non ancora aggiornati. Il tag
+Git v0.6.0 resta immutato. La versione vera è sempre quella stampata dal modulo.

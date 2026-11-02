@@ -27,9 +27,9 @@ function fixture(saved, media) {
 }
 test('quick menu opens, settings refresh works, Back restores focus', () => {
  const f=fixture(), old={focus(){f.doc.activeElement=this;}};old.focus();f.key(406);
- assert.equal(f.buttons().length,9);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'resume');
+ assert.equal(f.buttons().length,10);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'resume');
  f.api.actions.settings();let reload=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='reload');reload.focus();f.key(13);assert.deepEqual(f.calls,['reload']);
- f.key(10009);assert.equal(f.buttons().length,9);f.key(10009);assert.equal(f.doc.body.children.length,0);
+ f.key(10009);assert.equal(f.buttons().length,10);f.key(10009);assert.equal(f.doc.body.children.length,0);
 });
 test('browser navigation controls call history and canonical home', () => {
   const f = fixture(); f.api.actions.back(); f.api.actions.forward(); f.api.actions.home();
@@ -50,7 +50,7 @@ test('storage failures produce feedback without navigating', () => {
 });
 test('Back opens and closes toolbar without navigating, but respects fullscreen and text fields', () => {
   const f = fixture();
-  f.key(10009); assert.equal(f.buttons().length, 9);
+  f.key(10009); assert.equal(f.buttons().length, 10);
   f.key(10009); assert.equal(f.doc.body.children.length, 0);
   assert.deepEqual(f.calls, []);
   f.doc.fullscreenElement = {};
@@ -110,4 +110,17 @@ test('accessible video progress is saved without persisting unrelated page data'
  const handlers={}, video={readyState:0,addEventListener(k,fn){handlers[k]=fn;},currentTime:42};
  const f=fixture(null,video);handlers.timeupdate();const progress=JSON.parse(f.storage.get('saturn-progress'));
  assert.equal(progress[f.win.location.href],42);
+});
+test('cursor clicks the button containing an SVG icon',()=>{
+ const f=fixture();let clicked=0;
+ f.win.innerWidth=1280;f.win.innerHeight=720;
+ const button={tagName:'BUTTON',focus(){},click(){clicked++;}};
+ f.doc.elementFromPoint=()=>({tagName:'path',parentNode:{tagName:'svg',parentNode:button}});
+ f.key(13);assert.equal(clicked,1);
+});
+test('cursor scrolls an internal episode list at its edge',()=>{
+ const f=fixture();f.win.innerWidth=1280;f.win.innerHeight=720;f.win.scrollBy=()=>{throw Error('Should scroll list');};
+ const list={scrollHeight:600,clientHeight:100,scrollTop:0,getBoundingClientRect(){return{top:300,bottom:380};}};
+ f.win.getComputedStyle=()=>({overflowY:'auto'});f.doc.elementFromPoint=()=>list;
+ f.key(40);assert.ok(list.scrollTop>0);
 });

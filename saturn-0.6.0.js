@@ -1,4 +1,4 @@
-/* Saturn TV 0.6.0 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.6.1 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -22,7 +22,7 @@
       if (!siteHost(host) && host !== 'play.saturncdn.net') return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.6.0'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.6.1'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -163,6 +163,7 @@
     }
     var bar = null, buttons = [], previousFocus = null, message = null;
     var hiddenOverlays = [], autoOverlay = true, cinema = null, cursorSpeed = 500;
+    var playerReport=null,playerTicket=0;
     var view = 'main', lastAction = {}, idleTimer = null, learned = [];
     function readJSON(key, fallback) { try { return JSON.parse(win.localStorage.getItem(key) || 'null') || fallback; } catch(e) { return fallback; } }
     function writeJSON(key, value) { try { win.localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e) { tell('Memoria non disponibile.'); return false; } }
@@ -312,7 +313,24 @@
         if (action === 'speed') buttons[i].textContent = 'Cursore: ' + (cursorSpeed === 350 ? 'lento' : cursorSpeed === 500 ? 'medio' : 'veloce');
       }
     }
+    function playerCommand(command) {
+      var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');
+      if(!frame){tell('Lettore non presente. Apri prima una puntata.');return;}
+      try {if(new win.URL(frame.src,win.location.href).origin!=='https://play.saturncdn.net'){tell('Questo lettore esterno non è supportato.');return;}}catch(e){return;}
+      playerReport=null;var ticket=++playerTicket;
+      if(command==='play'&&frame.focus)frame.focus();
+      frame.contentWindow.postMessage({saturnTV:1,type:command,enabled:api.enabled},'https://play.saturncdn.net');
+      tell(command==='play'?'Avvio video in corso…':'Controllo del lettore in corso…');
+      win.setTimeout(function(){if(ticket===playerTicket&&!playerReport)tell('Il lettore non risponde al modulo. Possibile mancata iniezione o caricamento. Prova OK direttamente nel player o il browser Samsung.');},2000);
+    }
+    function reportPlayer(error) {
+      var video=doc.querySelector&&doc.querySelector('video');
+      var report={saturnTV:1,type:'playerStatus',video:!!video,paused:video?video.paused:true,ready:video?video.readyState:0,time:video?Math.floor(video.currentTime||0):0,error:error|| (video&&video.error?'MediaError '+video.error.code:'')};
+      win.parent.postMessage(report,'https://www.animesaturn.net');
+    }
     api.actions = {
+      playVideo:function(){playerCommand('play');},
+      playerStatus:function(){playerCommand('status');},
       blackClover50: function () { win.location.assign('https://www.animesaturn.net/anime/black-clover-67Dip/ep-50'); },
       fullscreen: function () { fullscreen(); },
       speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; writeJSON('saturn-speed',cursorSpeed); refreshLabels(); },
@@ -416,8 +434,8 @@
       stats.textContent=view==='settings'?'Filtro '+(api.enabled?'ON':'OFF')+' · Bloccati: '+api.popups+' finestre, '+api.resources+' risorse':'Frecce per scegliere · OK per aprire · Indietro per chiudere';
       bar.appendChild(stats);
       var specs;
-      if(view==='main') specs=[['Riprendi','resume'],['Cerca','search'],['Puntata precedente','previousEpisode'],['Puntata successiva','nextEpisode'],['Schermo intero','fullscreen'],['Preferiti','favorites'],['Black Clover · episodio 50','blackClover50'],['Impostazioni','settings'],['Chiudi','close']];
-      else if(view==='settings') specs=[['Menu principale','main'],['Pagina precedente','back'],['Pagina successiva','forward'],['Home','home'],['Aggiorna pagina','reload'],[api.enabled?'Disattiva filtro':'Attiva filtro','filter'],['Nascondi overlay e ricordalo','overlay'],['Annulla rimozione','undoOverlay'],['Overlay automatici','autoOverlay'],['Velocità cursore','speed'],['Versione e aggiornamenti','info'],['Salva collegamento','save']];
+      if(view==='main') specs=[['Riprendi','resume'],['Cerca','search'],['Puntata precedente','previousEpisode'],['Puntata successiva','nextEpisode'],['Avvia video','playVideo'],['Schermo intero','fullscreen'],['Preferiti','favorites'],['Black Clover · episodio 50','blackClover50'],['Impostazioni','settings'],['Chiudi','close']];
+      else if(view==='settings') specs=[['Menu principale','main'],['Pagina precedente','back'],['Pagina successiva','forward'],['Home','home'],['Aggiorna pagina','reload'],[api.enabled?'Disattiva filtro':'Attiva filtro','filter'],['Nascondi overlay e ricordalo','overlay'],['Annulla rimozione','undoOverlay'],['Overlay automatici','autoOverlay'],['Velocità cursore','speed'],['Stato lettore','playerStatus'],['Versione e aggiornamenti','info'],['Salva collegamento','save']];
       else {
         specs=[['Menu principale','main'],['Aggiungi questa pagina','addFavorite']];
         var favorites=readJSON('saturn-favorites',[]); if(!Array.isArray(favorites)) favorites=[];
@@ -470,6 +488,14 @@
       ensurePointer(); if(idleTimer && win.clearTimeout)win.clearTimeout(idleTimer);
       idleTimer=win.setTimeout(function(){if(pointer&&!bar)pointer.style.display='none';},3500);
     }
+    function clickableAncestor(el) {
+      var original=el;
+      for(var depth=0;el&&el!==doc&&depth<12;depth++,el=el.parentNode){
+        var tag=String(el.tagName||'').toUpperCase();
+        if(/^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|VIDEO)$/.test(tag)|| (el.getAttribute&&el.getAttribute('role')==='button'))return el;
+      }
+      return original;
+    }
     function pointerKey(code) {
       if (!ensurePointer()) return;
       if (code === 13) {
@@ -486,6 +512,7 @@
         }
         if (el) {
           if (activateFullscreen(el, frame)) return;
+          el=clickableAncestor(el);
           var link = el;
           while (link && link !== doc && link.tagName !== 'A') link = link.parentNode;
           if (link && link.tagName === 'A' && link.getAttribute('href')) {
@@ -504,6 +531,20 @@
     var held = {}, motionFrame = null, motionTime = 0, lastKeyAt = 0;
     function movePointer(dx, dy) {
       var nextY = cursorY + dy;
+      if(dy && doc.elementFromPoint && win.getComputedStyle){
+        var hovered=doc.elementFromPoint(cursorX,cursorY);
+        while(hovered&&hovered!==doc.body){
+          if(hovered.getBoundingClientRect&&hovered.scrollHeight>hovered.clientHeight+2 && /auto|scroll/.test(win.getComputedStyle(hovered).overflowY)){
+            var bounds=hovered.getBoundingClientRect(),old=hovered.scrollTop;
+            if((dy>0&&nextY>bounds.bottom-24)||(dy<0&&nextY<bounds.top+24)){
+              hovered.scrollTop+=dy*4;
+              if(hovered.scrollTop!==old)nextY=cursorY;
+            }
+            break;
+          }
+          hovered=hovered.parentNode;
+        }
+      }
       if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
       cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
       cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
@@ -546,6 +587,7 @@
     function handleKey(event) {
       if (win !== win.top) {
         try { if (win.top.__saturnTV && win.top.__saturnTV.handleKey) win.top.__saturnTV.handleKey(event); } catch (e) {
+          if(host==='play.saturncdn.net' && event.keyCode===13)return;
           if(host==='play.saturncdn.net' && !doc.fullscreenElement && [37,38,39,40,13,10009,406].indexOf(event.keyCode)!==-1){event.preventDefault();event.stopImmediatePropagation();win.parent.postMessage({saturnTV:1,type:'key',code:event.keyCode,repeat:!!event.repeat},'https://www.animesaturn.net');}
         }
         return;
@@ -607,12 +649,23 @@
       if(win===win.top){
         var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');
         if(!frame||event.source!==frame.contentWindow||event.origin!=='https://play.saturncdn.net')return;
-        if(data.type==='fullscreen')fullscreen(frame);
+        if(data.type==='playerStatus'){
+          playerReport=data;
+          tell(data.error?'Lettore: '+String(data.error).slice(0,150):!data.video?'Lettore risponde, ma il video non è stato creato. Possibile errore di avvio del player.':data.paused?'Video caricato (stato '+data.ready+'), in pausa. Usa Avvia video oppure OK nel player.':'Video avviato: '+data.time+' secondi (stato '+data.ready+').');
+        }
+        else if(data.type==='fullscreen')fullscreen(frame);
         else if(data.type==='key'&&[37,38,39,40,13,10009,406].indexOf(data.code)!==-1)handleKey({keyCode:data.code,repeat:!!data.repeat,target:frame,preventDefault:function(){},stopImmediatePropagation:function(){}});
         else if(data.type==='keyup')api.releaseKey(data.code);
       }else if(host==='play.saturncdn.net' && event.source===win.parent && event.origin==='https://www.animesaturn.net'){
-        if(data.type==='click'&&isFinite(data.x)&&isFinite(data.y)&&data.x>=0&&data.y>=0&&data.x<=win.innerWidth&&data.y<=win.innerHeight){
-          var el=doc.elementFromPoint(data.x,data.y);if(el){if(!activateFullscreen(el)){if(el.focus)el.focus();if(el.click)el.click();}}
+        if(data.type==='play'||data.type==='status'){
+          if(typeof data.enabled==='boolean')api.enabled=data.enabled;
+          var video=doc.querySelector&&doc.querySelector('video');
+          if(data.type==='play'&&video){
+            try{var started=video.play();if(started&&started.then)started.then(function(){reportPlayer();},function(e){reportPlayer(e.name+': '+e.message);});else reportPlayer();}catch(e){reportPlayer(e.name+': '+e.message);}
+          }else reportPlayer();
+        }
+        else if(data.type==='click'&&isFinite(data.x)&&isFinite(data.y)&&data.x>=0&&data.y>=0&&data.x<=win.innerWidth&&data.y<=win.innerHeight){
+          var el=doc.elementFromPoint(data.x,data.y);if(el){if(!activateFullscreen(el)){el=clickableAncestor(el);if(el.focus)el.focus();if(el.click)el.click();}}
         }
       }
     });

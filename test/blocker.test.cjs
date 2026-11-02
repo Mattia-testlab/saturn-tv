@@ -118,3 +118,13 @@ test('player click bridge accepts only parent site and coordinates inside frame'
  message('https://evil.test',20);message('https://www.animesaturn.net',900);assert.equal(clicks,0);
  message('https://www.animesaturn.net',20);assert.equal(clicks,1);
 });
+test('player play rejection is reported rather than silently ignored',async()=>{
+ const f=fixture('play.saturncdn.net'),events={},reports=[],parent={postMessage(data){reports.push(data);}};
+ f.win.top={};f.win.parent=parent;f.win.addEventListener=(key,fn)=>events[key]=fn;
+ const video={paused:true,readyState:4,currentTime:0,play(){return Promise.reject({name:'NotAllowedError',message:'User gesture required'});}};
+ f.win.document.querySelector=()=>video;install(f.win);
+ events.message({source:parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'play',enabled:false}});
+ await Promise.resolve();await Promise.resolve();
+ assert.match(reports[0].error,/NotAllowedError/);
+ assert.equal(f.win.__saturnTV.enabled,false);
+});
