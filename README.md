@@ -1,4 +1,4 @@
-# Saturn TV 0.6.3
+# Saturn TV 0.7.0
 
 Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
 Il modulo non equivale a un browser completo o a uBlock Origin.
@@ -77,10 +77,10 @@ python3 -m http.server 8766 --bind 127.0.0.1 --directory test/.browser
 Aprire http://127.0.0.1:8766/ nel browser. La fixture modifica SOLO la propria copia
 del controllo dominio per consentire localhost; il modulo distribuito non lo accetta.
 La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
-36 test Node e 33 verifiche browser eseguite localmente (27 generali e 6 su due origini separate). Firmware, tastiera Samsung,
+39 test Node. Le verifiche browser della release sono descritte nella sezione 0.7.0. Firmware, tastiera Samsung,
 player reale e pubblicità reale non sono sostituiti da questi test.
 
-`saturn.js` è la sorgente; `saturn-0.6.3.js` è la copia identica distribuita.
+`saturn.js` è la sorgente; `saturn-0.7.0.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets
 
@@ -169,3 +169,43 @@ Prova del bridge nel browser: /bridge.html della fixture locale, con origini dis
 127.0.0.1 e localhost sulla porta 8766. Confermati movimento, clic e uscita dal video
 tra contesti reali. Il player è simulato: non dimostra che JW Player o il firmware
 Samsung reagiscano allo stesso modo. La verifica conclusiva resta sulla TV.
+
+
+## 0.7.0 — avvio tramite API del player e barra temporale
+
+Corretto un errore di integrazione: le release 0.6.x chiamavano direttamente
+video.play(), anche quando il video era gestito da JW Player. La 0.7.0 usa
+jwplayer('jw-player').play/pause/seek, getPosition/getDuration e setControls(true).
+Se il provider è Vidstack usa media-player; HTML5 resta il fallback senza provider.
+Questo corregge il percorso di avvio, ma non prova da solo che fosse l’unica causa
+del nero sulla Samsung: rete, codec e rendering sul dispositivo non sono misurati.
+
+La barra ora mostra posizione, durata e un vero input range anche fuori dal cinema.
+Clic sulla timeline JW tradotto in seek con coordinate; frecce sul range spostano
+di 10 secondi, OK libera il focus, Indietro rimane disponibile. Durante la regolazione
+la barra non si nasconde. Il tempo non viene sostituito dai messaggi diagnostici.
+
+Gli aggiornamenti seguono gli eventi media, con timeupdate limitato a due report al
+secondo. I report passivi aggiornano solo la UI: non richiamano play o fullscreen.
+Non viene aggiunto un polling del player. I listener JW sono registrati una sola
+volta per istanza. Il test del percorso Play da idle fallisce se viene usato il
+video grezzo invece del provider. I test precedenti con video simulato non
+verificavano questo errore e non dimostravano il funzionamento reale su Tizen.
+
+Per un collaudo con versione certa, aggiungere senza rimuovere l’altro modulo:
+
+    Mattia-testlab/saturn-tv@v0.7.0
+
+Questo usa un nome nuovo nella cache TizenBrew e un tag immutabile sulla CDN.
+La scheda e la barra principale indicano 0.7.0; il canale senza tag resta disponibile.
+Non vengono cancellati dati, preferiti o impostazioni. Il tag è una prova fissata
+a questa release, non riceverà automaticamente le successive.
+
+39 test Node e 39 verifiche browser (27 generali, 12 su origini separate) includono
+avvio tramite modello JW da idle, tempo/durata, seek assoluto, focus della timeline,
+uscita e assenza di Play ripetuti dopo report di stato. Il modello JW non è la
+libreria reale e non prova la decodifica sulla TV. La prova del sito reale senza
+modulo e la prova del modulo simulato sono evidenze distinte.
+
+API di riferimento: https://docs.jwplayer.com/players/reference/playback e
+https://docs.jwplayer.com/players/reference/seek

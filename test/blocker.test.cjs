@@ -165,3 +165,32 @@ test('player seek clamps to video bounds, preserves pause and rejects unauthenti
  command('pause');assert.equal(video.paused,true);
  video.duration=NaN;command('seekBack');assert.match(reports.at(-1).error,/caricamento/);
 });
+test('JW idle startup uses the player API, never the raw video, and absolute seek uses duration',()=>{
+ const f=fixture('play.saturncdn.net'),events={},reports=[],calls=[],parent={postMessage(data){reports.push(data);}};
+ let state='idle',position=0,controls=false;
+ const raw={tagName:'VIDEO',readyState:0,paused:true,currentTime:0,duration:NaN,play(){throw Error('Must not bypass JW');}};
+ const jw={getState(){return state;},getPosition(){return position;},getDuration(){return 600;},getControls(){return controls;},setControls(v){controls=v;},play(){calls.push('play');state='playing';},pause(){calls.push('pause');state='paused';},seek(v){calls.push(['seek',v]);position=v;}};
+ f.win.parent=parent;f.win.top={};f.win.jwplayer=id=>{assert.equal(id,'jw-player');return jw;};f.win.addEventListener=(key,fn)=>events[key]=fn;
+ f.win.document.querySelector=selector=>selector==='#jw-player'?{}:selector==='video'?raw:null;install(f.win);
+ const command=(type,value)=>events.message({source:parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type,value}});
+ command('play');assert.deepEqual(calls,['play']);assert.equal(controls,true);assert.equal(reports.at(-1).engine,'JW Player');assert.equal(reports.at(-1).duration,600);
+ command('seek',240);assert.equal(position,240);command('toggle');assert.equal(state,'paused');command('seek',900);assert.equal(position,600);
+ const count=calls.length;command('seek',NaN);command('seek',-10);command('seek','10');assert.equal(calls.length,count);
+ assert.deepEqual(calls,['play',['seek',240],'pause',['seek',600]]);
+});
+test('media telemetry is passive and cannot replay a video or enter fullscreen',()=>{
+ const f=fixture('play.saturncdn.net'),events={},reports=[],parent={postMessage(data){reports.push(data);}};
+ const raw={tagName:'VIDEO',paused:false,readyState:4,currentTime:28,duration:600,play(){throw Error('Telemetry replay loop');}};
+ f.win.parent=parent;f.win.top={};f.win.document.querySelector=selector=>selector==='video'?raw:null;install(f.win);
+ for(let i=0;i<10;i++)f.handlers.timeupdate({target:raw});
+ assert.equal(reports.length,1);assert.equal(reports[0].passive,true);assert.equal(reports[0].time,28);
+});
+test('clicking a JW time slider seeks to the indicated coordinate',()=>{
+ const f=fixture('play.saturncdn.net'),events={},parent={postMessage(){}},seeks=[];
+ const slider={getBoundingClientRect(){return{left:20,width:400};}},target={closest(){return slider;}};
+ f.win.parent=parent;f.win.top={};f.win.innerWidth=640;f.win.innerHeight=360;f.win.addEventListener=(key,fn)=>events[key]=fn;
+ f.win.document.elementFromPoint=()=>target;f.win.document.querySelector=selector=>selector==='#jw-player'?{}:null;
+ f.win.jwplayer=()=>({getState(){return'paused';},play(){},getDuration(){return 600;},getPosition(){return 0;},seek(v){seeks.push(v);}});install(f.win);
+ events.message({source:parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'click',x:220,y:200}});
+ assert.deepEqual(seeks,[300]);
+});

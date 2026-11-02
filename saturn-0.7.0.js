@@ -1,0 +1,804 @@
+/* Saturn TV 0.7.0 — no external dependencies; experimental TizenBrew module. */
+(function (root) {
+  'use strict';
+  var blockedHosts = [
+    'subsignsodaic.com', 'doubleclick.net', 'googlesyndication.com',
+    'adsterra.com', 'popads.net', 'popcash.net', '073m.com', 'a-ads.com', 'wingsmob.com', 'sowve.com', 'chagnougroalry.net'
+  ];
+  function hostBlocked(host) {
+    host = String(host || '').toLowerCase().replace(/\.$/, '');
+    for (var i = 0; i < blockedHosts.length; i++) {
+      var b = blockedHosts[i];
+      if (host === b || host.slice(-(b.length + 1)) === '.' + b) return true;
+    }
+    return false;
+  }
+  function siteHost(host) { return /^(www\.)?animesaturn\.net$/.test(String(host).toLowerCase()); }
+  function install(win) {
+    try {
+      if (win.__saturnTV) return win.__saturnTV;
+      // Do not install on unrelated sites. Nested foreign frames are out of scope.
+      var host = win.location.hostname.toLowerCase();
+      if (!siteHost(host) && host !== 'play.saturncdn.net') return null;
+    } catch (e) { return null; }
+    var doc = win.document;
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.7.0'};
+    win.__saturnTV = api;
+    if(win===win.top)try{
+      var input=win.tizen&&win.tizen.tvinputdevice;
+      if(input&&input.getSupportedKeys)input.getSupportedKeys().forEach(function(key){if(/^Media(Play|Pause|PlayPause)$/.test(key.name))try{input.registerKey(key.name);}catch(e){}});
+    }catch(e){}
+    try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
+    function blocked(url) {
+      try { return api.enabled && hostBlocked(new win.URL(String(url), win.location.href).hostname); }
+      catch (e) { return false; }
+    }
+    function allowedNavigation(url) {
+      try {
+        var u = new win.URL(String(url), win.location.href);
+        return (u.protocol === 'https:' || u.protocol === 'http:') &&
+          siteHost(u.hostname);
+      } catch (e) { return false; }
+    }
+    function resource(el) {
+      return el && /^(SCRIPT|IFRAME)$/.test(el.tagName) && blocked(el.getAttribute('src') || '');
+    }
+    // Block all new-window requests on this site while protection is enabled.
+    // Existing-page location changes cannot all be intercepted this way.
+    var originalOpen = win.open;
+    var guardedOpen = function () {
+      if (!api.enabled) return originalOpen.apply(win, arguments);
+      api.popups++;
+      return null;
+    };
+    // Stop advertising scripts replacing our window.open hook after installation.
+    try { Object.defineProperty(win, 'open', {configurable: true, get: function () { return guardedOpen; }, set: function () {}}); }
+    catch (e) { win.open = guardedOpen; }
+    function guardTarget(event) {
+      if (activateFullscreen(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
+      if (!api.enabled) return;
+      var node = event.target;
+      while (node && node !== doc) {
+        if (node.tagName === 'A' || node.tagName === 'FORM') {
+          var target = String(node.getAttribute('target') || '').toLowerCase();
+          var url = node.getAttribute(node.tagName === 'A' ? 'href' : 'action');
+          if (blocked(url || '') || (url && !allowedNavigation(url)) || (target && target !== '_self' && target !== '_parent' && target !== '_top')) {
+            event.preventDefault(); event.stopImmediatePropagation(); api.popups++;
+          }
+          return;
+        }
+        node = node.parentNode;
+      }
+    }
+    (win.addEventListener ? win : doc).addEventListener('click', guardTarget, true);
+    doc.addEventListener('auxclick', guardTarget, true);
+    doc.addEventListener('submit', guardTarget, true);
+    if (win.HTMLFormElement) {
+      var formProto = win.HTMLFormElement.prototype, submit = formProto.submit;
+      formProto.submit = function () {
+        var dest = this.getAttribute('action') || win.location.href;
+        var target = this.getAttribute('target') || '_self';
+        if (api.enabled && (!allowedNavigation(dest) || target === '_blank')) { api.popups++; return; }
+        return submit.apply(this, arguments);
+      };
+    }
+    // Hooks cover dynamic insertion; they do not stop every parser-loaded script.
+    var proto = win.Node.prototype;
+    var append = proto.appendChild;
+    var insert = proto.insertBefore;
+    proto.appendChild = function (node) {
+      if (resource(node)) { api.resources++; return node; }
+      return append.apply(this, arguments);
+    };
+    proto.insertBefore = function (node) {
+      if (resource(node)) { api.resources++; return node; }
+      return insert.apply(this, arguments);
+    };
+    var originalFetch = win.fetch;
+    if (originalFetch) win.fetch = function (input) {
+      if (blocked(input && input.url ? input.url : input)) {
+        api.resources++;
+        return win.Promise.reject(new Error('Saturn TV: richiesta pubblicitaria bloccata'));
+      }
+      return originalFetch.apply(win, arguments);
+    };
+    // Reject blocked XHR at send time, without silently contacting another URL.
+    if (win.XMLHttpRequest) {
+      var xp = win.XMLHttpRequest.prototype;
+      var originalXOpen = xp.open, originalSend = xp.send;
+      xp.open = function (method, url) {
+        this.__saturnURL = url;
+        return originalXOpen.apply(this, arguments);
+      };
+      xp.send = function () {
+        if (blocked(this.__saturnURL)) {
+          api.resources++;
+          this.abort();
+          throw new Error('Saturn TV: richiesta pubblicitaria bloccata');
+        }
+        return originalSend.apply(this, arguments);
+      };
+    }
+    function scan(container) {
+      var nodes=Array.prototype.slice.call(container.querySelectorAll('script[src],iframe[src]'));
+      if(container.tagName && /^(SCRIPT|IFRAME)$/.test(container.tagName))nodes.unshift(container);
+      for (var i = 0; i < nodes.length; i++) {
+        var node = nodes[i];
+        if (resource(node) && node.parentNode) {
+          var remove = node;
+          if (node.tagName === 'IFRAME' && win.getComputedStyle) {
+            var parent = node.parentNode;
+            // Only the immediate fixed wrapper of an identified advertising iframe.
+            if (parent !== doc.body && parent !== doc.documentElement && parent.querySelectorAll &&
+                win.getComputedStyle(parent).position === 'fixed' &&
+                parent.querySelectorAll('video,audio,iframe').length === 1) remove = parent;
+          }
+          remove.parentNode.removeChild(remove); api.resources++;
+        }
+        else if (node.tagName === 'IFRAME') {
+          try { install(node.contentWindow); } catch (e) {}
+        }
+      }
+    }
+    var queued = false, dirtyRoots=[];
+    function scheduleScan(root) {
+      if(root && root.querySelectorAll && dirtyRoots.indexOf(root)===-1)dirtyRoots.push(root);
+      if (queued) return;
+      queued = true;
+      win.setTimeout(function () {
+        queued=false;var roots=dirtyRoots.length?dirtyRoots:[doc];dirtyRoots=[];
+        if(roots.length>12)roots=[doc];
+        for(var i=0;i<roots.length;i++){scan(roots[i]);bindProgress(roots[i]);if(api.enabled&&autoOverlay&&!cinema)hideOverlay(true,roots[i]);}
+      }, 200);
+    }
+    doc.addEventListener('load', function (event) {
+      if (event.target && event.target.tagName === 'IFRAME') {
+        try { install(event.target.contentWindow); } catch (e) {}
+      }
+    }, true);
+    if (win.MutationObserver) {
+      new win.MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i++) {
+          var target = records[i].target, own = false;
+          while (target && target !== doc) { if (/^saturn-/.test(target.id || '')) { own = true; break; } target = target.parentNode; }
+          if (!own) { scheduleScan(records[i].target); }
+        }
+      }).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src','style','class']});
+    }
+    var bar = null, buttons = [], previousFocus = null, message = null;
+    var hiddenOverlays = [], autoOverlay = true, cinema = null, cursorSpeed = 500;
+    var playerReport=null,playerTicket=0,remotePointerActive=false,lastHoverAt=0,transport=null,lastReportAt=0;
+    var view = 'main', lastAction = {}, idleTimer = null, learned = [];
+    function readJSON(key, fallback) { try { return JSON.parse(win.localStorage.getItem(key) || 'null') || fallback; } catch(e) { return fallback; } }
+    function writeJSON(key, value) { try { win.localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e) { tell('Memoria non disponibile.'); return false; } }
+    var speedSaved = readJSON('saturn-speed', 500); if ([350,500,700].indexOf(speedSaved)!==-1) cursorSpeed=speedSaved;
+    learned=readJSON('saturn-overlay-rules',[]); if (!Array.isArray(learned)) learned=[];
+    function safePage(saved) {
+      try { var u=new win.URL(saved.url); return u.protocol==='https:' && siteHost(u.hostname) && !u.username && !u.password; } catch(e) {return false;}
+    }
+    function overlaySignature(el) {
+      var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');
+      var src=''; if(frames.length) try {var u=new win.URL(frames[0].getAttribute('src'),win.location.href); src=u.origin+u.pathname;} catch(e) {}
+      var id=el.id || '', cls=String(el.getAttribute('class')||'').trim();
+      return (id || cls || src) ? el.tagName+'|'+id+'|'+cls+'|'+src : '';
+    }
+    function recognizedAd(el) {
+      var sig=overlaySignature(el); if(sig && learned.indexOf(sig)!==-1) return true;
+      var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');
+      for(var i=0;i<frames.length;i++) if(blocked(frames[i].getAttribute('src')||'')) return true;
+      return false;
+    }
+    try { autoOverlay = win.sessionStorage.getItem('saturn-auto-overlay') !== '0'; } catch (e) {}
+    function overlayCandidate(el) {
+      if (!el || el === doc.body || el === doc.documentElement || !win.getComputedStyle || !el.getBoundingClientRect) return false;
+      if (/^(VIDEO|AUDIO|INPUT|BUTTON)$/.test(el.tagName) || /^saturn-/.test(el.id || '')) return false;
+      var css = win.getComputedStyle(el), rect = el.getBoundingClientRect();
+      if (css.position !== 'fixed' || css.display === 'none' || css.visibility === 'hidden' || css.pointerEvents === 'none' || css.opacity === '0' ||
+          rect.width < win.innerWidth * 0.3 || rect.height < win.innerHeight * 0.25) return false;
+      if (el.id==='watch-iframe')return false;
+      if (el.querySelector && el.querySelector('video,audio,iframe#watch-iframe,iframe[src*="/embed/"],iframe[src*="turnstile"],iframe[src*="recaptcha"],input[type="password"]')) return false;
+      if (el.tagName === 'IFRAME' && /\/embed\/|turnstile|recaptcha/i.test(el.getAttribute('src') || '')) return false;
+      return true;
+    }
+    function hideOverlay(automatic, root) {
+      if (!doc.querySelectorAll || !win.getComputedStyle) { tell('Rimozione non disponibile.'); return; }
+      var scope=root || doc, nodes=Array.prototype.slice.call(scope.querySelectorAll('div,section,aside,iframe,dialog')), best=null, score=-1;
+      if(root && root.tagName)nodes.unshift(root);
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (!overlayCandidate(el)) continue;
+        if (automatic && (!recognizedAd(el) || el.getAttribute('role')==='dialog' || el.tagName==='DIALOG' || (el.querySelector && el.querySelector('form,[role=dialog]')))) continue;
+        var inside = el, own = false;
+        while (inside && inside !== doc.body) { if (/^saturn-/.test(inside.id || '')) own = true; inside = inside.parentNode; }
+        if (own) continue;
+        var css = win.getComputedStyle(el), z = parseInt(css.zIndex, 10) || 0;
+        if (z > score) { best = el; score = z; }
+      }
+      if (!best) { if (!automatic) tell('Nessun overlay separabile dal player trovato.'); return false; }
+      if (!automatic) { var sig=overlaySignature(best); if(sig && learned.indexOf(sig)===-1) { learned.push(sig); learned=learned.slice(-30); writeJSON('saturn-overlay-rules',learned); } }
+      hiddenOverlays.push({element:best, style:best.getAttribute('style')});
+      best.style.setProperty('display', 'none', 'important');
+      api.popups++;refreshLabels();
+      if (!automatic) tell('Riquadro nascosto. Se era utile, scegli Annulla rimozione.');
+      return true;
+    }
+    function undoOverlay() {
+      var item = hiddenOverlays.pop();
+      if (!item) { tell('Nessuna rimozione da annullare.'); return; }
+      autoOverlay = false;
+      try { win.sessionStorage.setItem('saturn-auto-overlay','0'); } catch(e) {}
+      var rule=overlaySignature(item.element), at=learned.indexOf(rule); if(at!==-1) { learned.splice(at,1); writeJSON('saturn-overlay-rules',learned); }
+      if (item.style === null) item.element.removeAttribute('style'); else item.element.setAttribute('style',item.style);
+      refreshLabels();
+      tell('Riquadro ripristinato. Rimozione automatica disattivata per questa sessione.');
+    }
+
+    var bookmarkKey = 'saturn-bookmark';
+    function safeBookmark() {
+      try {
+        var saved = JSON.parse(win.localStorage.getItem(bookmarkKey) || 'null');
+        if (!saved || typeof saved.url !== 'string') return null;
+        var url = new win.URL(saved.url);
+        if (url.protocol !== 'https:' || !siteHost(url.hostname) || url.username || url.password) return null;
+        return saved;
+      } catch (e) { return null; }
+    }
+    function tell(text) { if (message) message.textContent = text;else if(transport&&transport.querySelector){var label=transport.querySelector('[data-saturn-time]');if(label)label.textContent=text;} }
+    function toggleFilter() {
+      try { win.sessionStorage.setItem('saturn-disabled', api.enabled ? '1' : '0'); }
+      catch (e) { tell('Impossibile salvare la preferenza del filtro.'); return; }
+      win.location.reload();
+    }
+    function exitCinema() {
+      if (!cinema) return;
+      if(cinema.controls && cinema.controls.parentNode)cinema.controls.parentNode.removeChild(cinema.controls);
+      if (cinema.style === null) cinema.el.removeAttribute('style'); else cinema.el.setAttribute('style',cinema.style);
+      transport=null;cinema = null; ensurePointer();
+    }
+    function openMainBar(){if(win!==win.top)return;if(bar)hideBar();view='main';status();}
+    function exitDisplay(showMenu){
+      stopMotion();
+      function done(){
+        ensurePointer();
+        if(!showMenu)return;
+        if(win===win.top)openMainBar();
+        else if(host==='play.saturncdn.net')win.parent.postMessage({saturnTV:1,type:'exitMenu'},'https://www.animesaturn.net');
+      }
+      if(cinema){exitCinema();done();return;}
+      var native=doc.fullscreenElement||doc.webkitFullscreenElement;
+      var video=doc.querySelector&&doc.querySelector('video');
+      try{
+        var exit=doc.exitFullscreen||doc.webkitExitFullscreen||doc.webkitCancelFullScreen;
+        if(native&&exit){var result=exit.call(doc);if(result&&result.then)result.then(done,function(){tell('Uscita non riuscita: premi Indietro sul telecomando.');});else win.setTimeout(done,100);}
+        else if(video&&video.webkitDisplayingFullscreen&&video.webkitExitFullscreen){video.webkitExitFullscreen();win.setTimeout(done,100);}
+        else done();
+      }catch(e){tell('Uscita schermo intero non riuscita.');}
+    }
+    function fullscreen(preferred) {
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        exitDisplay(true); return;
+      }
+      if (cinema) { exitCinema(); return; }
+      var nodes = doc.querySelectorAll('video,iframe#watch-iframe,iframe[src*="/embed/"]'), best = null, area = 0;
+      for (var i = 0; i < nodes.length; i++) {
+        var rect = nodes[i].getBoundingClientRect(), a = rect.width * rect.height;
+        if (a > area) { area = a; best = nodes[i]; }
+      }
+      if (preferred && preferred.getBoundingClientRect) best = preferred;
+      if (!best) { tell('Apri prima un episodio: nessun lettore riconosciuto.'); return; }
+      stopMotion(); hideBar();
+      function fallback() {
+        if (cinema) return;
+        cinema = {el:best, style:best.getAttribute('style')};
+        best.style.setProperty('position','fixed','important');
+        var values = {top:'0',left:'0',width:'100vw',height:'100vh',maxWidth:'none',maxHeight:'none',zIndex:'2147483644',background:'#000',border:'0'};
+        for (var key in values) best.style.setProperty(key.replace(/[A-Z]/g,function(c){return '-'+c.toLowerCase();}),values[key],'important');
+        var video=null;try{video=best.tagName==='VIDEO'?best:best.contentDocument?best.contentDocument.querySelector('video'):best.querySelector('video');}catch(e){}
+        cinema.controls=showTransport(video);
+        wakePointer();
+      }
+      // The TV app already fills the screen: keep the official iframe in-page so Menu remains reachable.
+      if(best.tagName==='IFRAME' && best.id==='watch-iframe'){fallback();playerCommand('status');return;}
+      try {
+        var request = best.requestFullscreen || best.webkitRequestFullscreen;
+        if (!request) { fallback(); return; }
+        var promise = request.call(best);
+        if (promise && promise.catch) promise.catch(fallback);
+        else win.setTimeout(function(){if (!doc.fullscreenElement && !doc.webkitFullscreenElement) fallback();},300);
+      } catch(e) { fallback(); }
+    }
+    function fullscreenControl(el) {
+      for (var n = 0; el && n < 7; n++, el = el.parentNode) {
+        if (!el.getAttribute) continue;
+        var label = (el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '');
+        var cls = String(el.getAttribute('class') || '');
+        if (el.getAttribute('data-plyr') === 'fullscreen' ||
+            /(?:jw-icon-fullscreen|vjs-fullscreen-control|fullscreen-button|fullscreen-btn)/i.test(cls) ||
+            /full[ -]?screen|schermo intero|pieno schermo/i.test(label)) return true;
+      }
+      return false;
+    }
+    function activateFullscreen(el, frame) {
+      if (!fullscreenControl(el)) return false;
+      if (win !== win.top) {
+        try { win.top.__saturnTV.fullscreenFromPlayer(win.frameElement); } catch(e) { if(host==='play.saturncdn.net')win.parent.postMessage({saturnTV:1,type:'fullscreen'},'https://www.animesaturn.net');else return false; }
+      } else fullscreen(frame);
+      return true;
+    }
+    api.fullscreenFromPlayer = fullscreen;
+    function refreshLabels() {
+      for (var i = 0; i < buttons.length; i++) {
+        var action = buttons[i].getAttribute('data-saturn-action');
+        if (action === 'autoOverlay') buttons[i].textContent = 'Overlay automatici: ' + (autoOverlay ? 'ON' : 'OFF');
+        if(action==='undoOverlay')buttons[i].disabled=!hiddenOverlays.length;
+        if (action === 'speed') buttons[i].textContent = 'Cursore: ' + (cursorSpeed === 350 ? 'lento' : cursorSpeed === 500 ? 'medio' : 'veloce');
+      }
+    }
+    function playerCommand(command,value) {
+      var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');
+      if(!frame){tell('Lettore non presente. Apri prima una puntata.');return;}
+      try {if(new win.URL(frame.src,win.location.href).origin!=='https://play.saturncdn.net'){tell('Questo lettore esterno non è supportato.');return;}}catch(e){return;}
+      playerReport=null;var ticket=++playerTicket;
+      if(!bar&&(command==='play'||command==='toggle')&&frame.focus)frame.focus();
+      frame.contentWindow.postMessage({saturnTV:1,type:command,value:value,enabled:api.enabled},'https://play.saturncdn.net');
+      tell((command==='play'||command==='toggle')?'Avvio video in corso…':'Controllo del lettore in corso…');
+      win.setTimeout(function(){if(ticket===playerTicket&&!playerReport)tell('Il lettore non risponde al modulo. Possibile mancata iniezione o caricamento. Prova OK direttamente nel player o il browser Samsung.');},2000);
+    }
+    var boundJW=null,lastEngineError='';
+    function jwEngine(){
+      if(typeof win.jwplayer!=='function'||!doc.querySelector||!doc.querySelector('#jw-player'))return null;
+      try{var player=win.jwplayer('jw-player');if(!player||typeof player.getState!=='function'||typeof player.play!=='function')return null;
+        if(player!==boundJW){boundJW=player;lastEngineError='';if(player.on){['error','setupError','playAttemptFailed'].forEach(function(type){player.on(type,function(event){lastEngineError=String(event&&event.message||type).slice(0,150);reportPlayer(lastEngineError,true);});});player.on('play',function(){lastEngineError='';reportPlayer('',true);});}}
+        return player;
+      }catch(e){return null;}
+    }
+    function mediaState(){
+      var video=doc.querySelector&&doc.querySelector('video'),jw=jwEngine(),custom=doc.querySelector&&doc.querySelector('media-player');
+      var state={video:!!video,engine:jw?'JW Player':custom?'Vidstack':'HTML5',paused:video?video.paused:true,ready:video?video.readyState:0,time:video?video.currentTime||0:0,duration:video&&isFinite(video.duration)?video.duration:0,error:video&&video.error?'MediaError '+video.error.code:''};
+      if(jw)try{state.state=jw.getState();state.video=true;state.paused=state.state!=='playing'&&state.state!=='buffering';state.time=jw.getPosition()||0;state.duration=jw.getDuration()||0;if(lastEngineError)state.error=lastEngineError;}catch(e){}
+      return state;
+    }
+    function reportPlayer(error,passive) {
+      var report=mediaState();report.saturnTV=1;report.type='playerStatus';report.version=api.version;report.passive=!!passive;if(error)report.error=error;
+      win.parent.postMessage(report,'https://www.animesaturn.net');
+    }
+    function controlVideo(video,command,value){
+      var jw=jwEngine(),custom=doc.querySelector&&doc.querySelector('media-player');
+      if(jw){
+        if(jw.setControls&&(!jw.getControls||!jw.getControls()))jw.setControls(true);
+        if(command==='seek'||command==='seekBack'||command==='seekForward'){
+          var duration=jw.getDuration(),position=jw.getPosition()||0;
+          if(!isFinite(duration)||duration<=0)throw new Error('Attendi il caricamento prima di spostarti nel video.');
+          jw.seek(Math.max(0,Math.min(duration,command==='seek'?value:position+(command==='seekBack'?-10:10))));
+        }else if(command==='pause'||(command==='toggle'&&/playing|buffering/.test(jw.getState())))jw.pause(true);
+        else return jw.play(true);
+        return;
+      }
+      var target=custom&&typeof custom.play==='function'?custom:video;
+      if(!target)throw new Error('Il lettore non è ancora pronto.');
+      if(target===video)video.controls=true;
+      if(command==='seek'||command==='seekBack'||command==='seekForward'){
+        if(!isFinite(target.duration)||target.duration<=0)throw new Error('Attendi il caricamento prima di spostarti nel video.');
+        target.currentTime=Math.max(0,Math.min(target.duration,command==='seek'?value:target.currentTime+(command==='seekBack'?-10:10)));
+      }else if(command==='pause'||(command==='toggle'&&!target.paused))target.pause();
+      else return target.play();
+    }
+    function timeLabel(value){value=isFinite(value)&&value>0?Math.floor(value):0;return Math.floor(value/60)+':'+('0'+value%60).slice(-2);}
+    function updateTransport(state){
+      if(!transport||!state)return;
+      var slider=transport.querySelector('input'),label=transport.querySelector('[data-saturn-time]');
+      if(label)label.textContent=state.error?'Lettore: '+String(state.error).slice(0,100):timeLabel(state.time)+' / '+(state.duration>0?timeLabel(state.duration):'—:—')+(state.state==='buffering'?' · Caricamento…':state.state==='idle'?' · Premi Play':'');
+      if(slider){slider.disabled=!(isFinite(state.duration)&&state.duration>0);slider.max=state.duration>0?state.duration:1;if(doc.activeElement!==slider)slider.value=state.time||0;}
+    }
+    function showTransport(video){
+      if(transport){var leave=transport.querySelector('[data-saturn-leave]');if(leave)leave.textContent=cinema?'Esci da schermo intero':'Chiudi controlli';updateTransport(video?mediaState():playerReport);wakePointer();return transport;}
+      var controls=doc.createElement('section');transport=controls;controls.id='saturn-cinema-controls';controls.setAttribute('aria-label','Controlli video');
+      controls.style.cssText='position:fixed;bottom:18px;left:18px;right:150px;z-index:2147483645;background:#101820;color:#eef6ff;padding:12px;font:22px sans-serif';
+      var style=doc.createElement('style');style.textContent='#saturn-cinema-controls button{font:inherit;padding:10px 14px;margin:4px;min-height:48px;background:#eef6ff;color:#101820;border:0}#saturn-cinema-controls button:focus,#saturn-cinema-controls input:focus{outline:3px solid #8cdeff;outline-offset:3px}#saturn-cinema-controls input{width:100%;height:32px;box-sizing:border-box;cursor:pointer}';controls.appendChild(style);
+      var label=doc.createElement('div');label.setAttribute('data-saturn-time','');label.textContent='Caricamento durata…';controls.appendChild(label);
+      var slider=doc.createElement('input');slider.type='range';slider.min='0';slider.max='1';slider.step='1';slider.value='0';slider.disabled=true;slider.setAttribute('aria-label','Posizione video');
+      function run(command,value){wakePointer();if(video)try{var result=controlVideo(video,command,value);if(result&&result.catch)result.catch(function(e){updateTransport({error:e.message});});updateTransport(mediaState());}catch(e){updateTransport({error:e.message});}else playerCommand(command,value);}
+      slider.addEventListener('change',function(){run('seek',Number(slider.value));});slider.addEventListener('input',function(){wakePointer();});controls.appendChild(slider);
+      [['−10 s','seekBack'],['Play / Pausa','toggle'],['+10 s','seekForward']].forEach(function(spec){var control=doc.createElement('button');control.textContent=spec[0];control.setAttribute('aria-label',spec[0]==='−10 s'?'Indietro di 10 secondi':spec[0]==='+10 s'?'Avanti di 10 secondi':spec[0]);control.addEventListener('click',function(){run(spec[1]);});controls.appendChild(control);});
+      var leave=doc.createElement('button');leave.setAttribute('data-saturn-leave','');leave.textContent=cinema?'Esci da schermo intero':'Chiudi controlli';leave.addEventListener('click',function(){if(!cinema&&transport){transport.parentNode.removeChild(transport);transport=null;}exitDisplay(true);});controls.appendChild(leave);
+      doc.body.appendChild(controls);updateTransport(video?mediaState():playerReport);wakePointer();return controls;
+    }
+    function seekAt(el,x){
+      var slider=el&&el.closest&&el.closest('.jw-slider-time,.vjs-progress-control,media-time-slider');
+      if(!slider)return false;
+      var rect=slider.getBoundingClientRect(),state=mediaState();if(rect.width<=0||state.duration<=0)return true;
+      controlVideo(doc.querySelector('video'),'seek',Math.max(0,Math.min(1,(x-rect.left)/rect.width))*state.duration);reportPlayer('',true);return true;
+    }
+    function clickAt(el,x,y){
+      if(!el)return;
+      if(el.tagName==='INPUT'&&el.type==='range'&&!el.disabled){var box=el.getBoundingClientRect();if(box.width<=0)return;el.value=Number(el.min||0)+(Number(el.max)-Number(el.min||0))*Math.max(0,Math.min(1,(x-box.left)/box.width));el.focus();el.dispatchEvent(new win.Event('change',{bubbles:true}));return;}
+      if(seekAt(el,x))return;
+      el=clickableAncestor(el);if(el.focus)el.focus();
+      if(el.dispatchEvent&&win.MouseEvent){['mousedown','mouseup','click'].forEach(function(type){el.dispatchEvent(new win.MouseEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,button:0}));});}else if(el.click)el.click();
+    }
+    if(host==='play.saturncdn.net'){
+      ['timeupdate','loadedmetadata','durationchange','playing','pause','error'].forEach(function(type){doc.addEventListener(type,function(event){if(!event.target||event.target.tagName!=='VIDEO')return;var now=Date.now();if(type==='timeupdate'&&now-lastReportAt<500)return;lastReportAt=now;reportPlayer('',true);},true);});
+    }
+    api.actions = {
+      playVideo:function(){hideBar();showTransport();playerCommand('play');},
+      toggleVideo:function(){hideBar();showTransport();playerCommand('toggle');},
+      exitFullscreen:function(){exitDisplay(true);},
+      playerStatus:function(){playerCommand('status');},
+      blackClover50: function () { win.location.assign('https://www.animesaturn.net/anime/black-clover-67Dip/ep-50'); },
+      fullscreen: function () { fullscreen(); },
+      speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; writeJSON('saturn-speed',cursorSpeed); refreshLabels(); },
+      autoOverlay: function () {
+        autoOverlay = !autoOverlay;
+        try { win.sessionStorage.setItem('saturn-auto-overlay', autoOverlay ? '1' : '0'); } catch(e) {}
+        refreshLabels();
+        tell('Overlay automatici: ' + (autoOverlay ? 'attivi' : 'spenti'));
+        if (autoOverlay) scheduleScan();
+      },
+      overlay: hideOverlay,
+      undoOverlay: undoOverlay,
+      reload: function () { win.location.reload(); },
+      back: function () { win.history.back(); },
+      forward: function () { win.history.forward(); },
+      home: function () { win.location.assign('https://www.animesaturn.net/'); },
+      filter: toggleFilter,
+      save: function () {
+        try {
+          var url = new win.URL(win.location.href);
+          if (url.protocol !== 'https:' || !siteHost(url.hostname) || url.username || url.password) {
+            tell('Puoi salvare solo una pagina di AnimeSaturn.'); return;
+          }
+          win.localStorage.setItem(bookmarkKey, JSON.stringify({url: url.href, title: doc.title || 'Episodio salvato'}));
+          tell('Pagina salvata. «Riapri salvato» ti riporta qui, senza memorizzare il minuto del video.');
+          refreshLabels();
+        } catch (e) { tell('Salvataggio non disponibile: la memoria del browser non è accessibile.'); }
+      },
+      resume: function () {
+        var saved=readJSON('saturn-last',null); if(!saved || !safePage(saved)) saved=safeBookmark();
+        if (saved) win.location.assign(saved.url);
+        else tell('Nessuna pagina salvata. Apri un episodio e scegli «Salva pagina».');
+      }
+    };
+    function episodeLinks() {
+      var match=new win.URL(win.location.href).pathname.match(/^\/(?:anime|episode)\/([^/]+)\/ep-(\d+)/);
+      var result={previous:null,next:null}; if(!match) return result;
+      var links=doc.querySelectorAll('a[href]'), current=Number(match[2]), lower=-1, higher=Infinity;
+      for(var i=0;i<links.length;i++) try {
+        var u=new win.URL(links[i].getAttribute('href'),win.location.href), m=u.pathname.match(/^\/(?:anime|episode)\/([^/]+)\/ep-(\d+)/);
+        if(!m || m[1]!==match[1] || !allowedNavigation(u.href)) continue;
+        var n=Number(m[2]); if(n<current && n>lower){lower=n;result.previous=u.href;} if(n>current&&n<higher){higher=n;result.next=u.href;}
+      } catch(e) {}
+      return result;
+    }
+    api.actions.previousEpisode=function(){var u=episodeLinks().previous;if(u)win.location.assign(u);};
+    api.actions.nextEpisode=function(){var u=episodeLinks().next;if(u)win.location.assign(u);};
+    api.actions.search=function(){
+      var input=doc.querySelector && doc.querySelector('input[type=search],input[name=key],input[name=keyword]');
+      if(!input){tell('Ricerca non presente: apri Home.');return;} hideBar(); input.focus(); if(input.scrollIntoView)input.scrollIntoView({block:'center'});
+    };
+    api.actions.settings=function(){switchView('settings');};
+    api.actions.tools=function(){switchView('tools');};
+    api.actions.episodes=function(){switchView('episodes');};
+    api.actions.episodeList=function(){
+      var list=doc.querySelector&&doc.querySelector('#ep-list-scroll,.ep-list-scroll');
+      if(!list){tell('Lista puntate non trovata in questa pagina.');return;}hideBar();if(list.scrollIntoView)list.scrollIntoView({block:'center'});var link=list.querySelector('a[href]');if(link&&link.focus)link.focus();
+    };
+    api.actions.main=function(){switchView('main');};
+    api.actions.favorites=function(){switchView('favorites');};
+    api.actions.addFavorite=function(){
+      var entry={url:win.location.href,title:doc.title||'Puntata'}; if(!safePage(entry))return;
+      var list=readJSON('saturn-favorites',[]); if(!Array.isArray(list))list=[];
+      list=list.filter(function(x){return x.url!==entry.url;}); list.unshift(entry);writeJSON('saturn-favorites',list.slice(0,12));switchView('favorites');
+    };
+    api.actions.info=function(){tell('Versione attiva '+api.version+'. Se diversa da GitHub, il caricatore usa ancora una copia in cache. Ricaricare la pagina non garantisce un aggiornamento.');};
+    function switchView(next){hideBar();view=next;status();}
+    function bindProgress(root){
+      if(!doc.querySelectorAll)return;
+      var scope=root&&root.querySelectorAll?root:doc,videos=Array.prototype.slice.call(scope.querySelectorAll('video'));if(scope.tagName==='VIDEO')videos.unshift(scope);
+      for(var i=0;i<videos.length;i++)(function(video){
+        if(video.__saturnProgress)return;video.__saturnProgress=true;
+        var page;try{page=win.top.location.href;}catch(e){return;}
+        if(!/\/(?:anime|episode)\/[^/]+\/ep-\d+/.test(page))return;
+        var previous=readJSON('saturn-progress',{}), saved=previous[page];
+        function restore(){if(saved && saved>5 && isFinite(video.duration) && saved<video.duration-15)try{video.currentTime=saved;}catch(e){}}
+        if(video.readyState>=1)restore();else video.addEventListener('loadedmetadata',restore);
+        var last=0;video.addEventListener('timeupdate',function(){var now=Date.now();if(now-last<5000)return;last=now;
+          var data=readJSON('saturn-progress',{});if(typeof data!=='object'||Array.isArray(data))data={};data[page]=Math.floor(video.currentTime||0);
+          var keys=Object.keys(data);while(keys.length>30)delete data[keys.shift()];writeJSON('saturn-progress',data);
+        });
+      })(videos[i]);
+    }
+    function rememberPage(){if(win!==win.top || !/\/(?:anime|episode)\/[^/]+\/ep-\d+/.test(win.location.href))return;writeJSON('saturn-last',{url:win.location.href,title:doc.title||'Ultima puntata'});}
+    rememberPage();bindProgress();doc.addEventListener('DOMContentLoaded',rememberPage);
+    function hideBar() {
+      if (!bar) return;
+      if(doc.activeElement && doc.activeElement.getAttribute) lastAction[view]=doc.activeElement.getAttribute('data-saturn-action');
+      bar.parentNode.removeChild(bar); bar = null; buttons = []; message = null;
+      ensurePointer();
+      try { if (previousFocus && previousFocus.focus) previousFocus.focus(); } catch (e) {}
+    }
+    function status() {
+      if (win !== win.top || !doc.body) return;
+      if (bar) { hideBar(); return; }
+      stopMotion();
+      previousFocus = doc.activeElement;
+      if (previousFocus && /^(INPUT|TEXTAREA|SELECT)$/.test(previousFocus.tagName)) previousFocus = null;
+      bar = doc.createElement('section');
+      bar.id = 'saturn-toolbar';bar.setAttribute('data-view',view); bar.setAttribute('aria-label', 'Comandi Saturn TV');
+      bar.style.cssText = 'position:fixed;top:3vh;left:3vw;right:3vw;z-index:2147483647;background:#101820;color:#f4f7fa;padding:24px;box-shadow:0 12px 32px #0008;font:22px/1.4 sans-serif;text-align:left;max-height:88vh;overflow:auto;box-sizing:border-box';
+      var style = doc.createElement('style');
+      style.textContent = '#saturn-toolbar button{font:inherit;line-height:1.3;min-height:58px;max-width:100%;box-sizing:border-box;overflow-wrap:break-word;padding:12px 18px;margin:6px 10px 6px 0;border:2px solid #72899c;border-radius:6px;background:#1d3040;color:#f4f7fa;cursor:pointer}#saturn-toolbar[data-view=main] button{width:calc(33.333% - 12px)}#saturn-toolbar button:focus,#saturn-toolbar button:hover{outline:4px solid #8cdeff;outline-offset:2px;background:#294b62}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575;cursor:default}#saturn-toolbar p{margin:8px 0 12px;font:inherit;color:#c6d9e8}';
+      bar.appendChild(style);
+      var title = doc.createElement('strong'); title.textContent = view==='tools' ? 'Strumenti · '+api.version : view==='settings' ? 'Altre opzioni' : view==='episodes'?'Puntate':view==='favorites' ? 'Preferiti' : 'Saturn TV · '+api.version; bar.appendChild(title);
+      var stats = doc.createElement('p');
+      stats.textContent=view==='tools'?'Filtro '+(api.enabled?'ON':'OFF')+' · Bloccati: '+api.popups+' finestre, '+api.resources+' risorse':'Frecce · OK seleziona · Indietro esce dal video o chiude la barra';
+      bar.appendChild(stats);
+      var specs;
+      if(view==='main') specs=[['Play / Pausa','toggleVideo'],['Schermo intero','fullscreen'],['Puntate','episodes'],['Cerca','search'],['Black Clover · 50','blackClover50'],['Altro','settings']];
+      else if(view==='settings') specs=[['Torna','main'],['Riprendi','resume'],['Preferiti','favorites'],['Home','home'],['Velocità cursore','speed'],['Overlay automatici','autoOverlay'],['Strumenti','tools']];
+      else if(view==='episodes')specs=[['Torna','main'],['Puntata precedente','previousEpisode'],['Puntata successiva','nextEpisode'],['Mostra lista puntate','episodeList']];
+      else if(view==='tools')specs=[['Torna','settings'],['Aggiorna pagina','reload'],[api.enabled?'Disattiva filtro':'Attiva filtro','filter'],['Nascondi overlay e ricordalo','overlay'],['Annulla rimozione','undoOverlay'],['Stato lettore','playerStatus'],['Versione attiva','info']];
+      else {
+        specs=[['Menu principale','main'],['Aggiungi questa pagina','addFavorite']];
+        var favorites=readJSON('saturn-favorites',[]); if(!Array.isArray(favorites)) favorites=[];
+        favorites.filter(safePage).forEach(function(f,index){var action='favorite'+index;api.actions[action]=function(){win.location.assign(f.url);};specs.push([f.title||f.url,action]);});
+      }
+      var neighbors=episodeLinks(), latest=readJSON('saturn-last',null);
+
+      for (var i = 0; i < specs.length; i++) {
+        var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
+        btn.setAttribute('data-saturn-action', specs[i][1]);
+        if(specs[i][1]==='resume')btn.disabled=!(latest&&safePage(latest))&&!safeBookmark();
+        if(specs[i][1]==='previousEpisode')btn.disabled=!neighbors.previous;
+        if(specs[i][1]==='nextEpisode')btn.disabled=!neighbors.next;
+        if(specs[i][1]==='undoOverlay')btn.disabled=!hiddenOverlays.length;
+        btn.addEventListener('click', function (event) {
+          event.preventDefault(); event.stopPropagation();
+          var action = this.getAttribute('data-saturn-action');
+          if (action === 'close') hideBar(); else api.actions[action]();
+        });
+        buttons.push(btn); bar.appendChild(btn);
+      }
+      message = doc.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+      message.textContent=view==='tools'?'Aggiorna e cambio filtro ricaricano la pagina. Indietro torna alla barra.':view==='episodes'?'Scegli una puntata oppure apri la lista del sito.':view==='main'?'Indietro chiude questa barra. Durante il video, Indietro torna ai comandi.':'Indietro torna alla barra principale.';
+      bar.appendChild(message); doc.body.appendChild(bar); var focus=buttons.filter(function(b){return !b.disabled && b.getAttribute('data-saturn-action')===lastAction[view];})[0] || buttons.filter(function(b){return !b.disabled;})[0];if(focus)focus.focus(); refreshLabels(); ensurePointer();
+    }
+    api.status = status;
+    api.isBlocked = blocked;
+    var pointer = null, cursorX = 0, cursorY = 0, menuButton = null;
+    function ensurePointer() {
+      if (win !== win.top || !doc.body || !doc.elementFromPoint || !win.innerWidth) return false;
+      if (!pointer) {
+        cursorX = Math.round(win.innerWidth / 2); cursorY = Math.round(win.innerHeight / 2);
+        pointer = doc.createElement('div'); pointer.id = 'saturn-pointer';
+        pointer.innerHTML = '<svg width=28 height=34 viewBox="0 0 28 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 2V28L9 21L15 32L21 29L15 18H26Z" fill="white" stroke="#101820" stroke-width="2"/></svg>'; pointer.setAttribute('aria-hidden', 'true');
+        pointer.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;color:#fff;font:36px sans-serif;text-shadow:0 0 4px #000,2px 2px 2px #000;transform:rotate(-35deg);line-height:1';
+        doc.body.appendChild(pointer);
+        menuButton = doc.createElement('button'); menuButton.type = 'button';
+        menuButton.id = 'saturn-menu'; menuButton.textContent = 'Menu';
+        menuButton.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:2147483645;padding:12px 18px;background:#101820;color:white;border:2px solid #8cdeff;border-radius:8px;font:20px sans-serif';
+        menuButton.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); status(); });
+        doc.body.appendChild(menuButton);
+      }
+      pointer.style.left='0'; pointer.style.top='0'; pointer.style.transform='translate3d('+cursorX+'px,'+cursorY+'px,0) rotate(-35deg)';
+      var hidden = bar || doc.fullscreenElement || doc.webkitFullscreenElement;
+      pointer.style.display = hidden ? 'none' : 'block';
+      if (menuButton) menuButton.style.display = hidden ? 'none' : 'block';
+      return true;
+    }
+    function wakePointer(){
+      ensurePointer(); if(idleTimer && win.clearTimeout)win.clearTimeout(idleTimer);
+      if(transport){transport.style.opacity='1';transport.style.pointerEvents='auto';}
+      idleTimer=win.setTimeout(function(){if(pointer&&!bar)pointer.style.display='none';if(transport&&!bar&&doc.activeElement!==transport.querySelector('input')){transport.style.opacity='0';transport.style.pointerEvents='none';}},3500);
+    }
+    function clickableAncestor(el) {
+      var original=el;
+      for(var depth=0;el&&el!==doc&&depth<12;depth++,el=el.parentNode){
+        var tag=String(el.tagName||'').toUpperCase();
+        if(/^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|VIDEO)$/.test(tag)|| (el.getAttribute&&el.getAttribute('role')==='button'))return el;
+      }
+      return original;
+    }
+    function pointerKey(code) {
+      if (!ensurePointer()) return;
+      if (code === 13) {
+        var el = doc.elementFromPoint(cursorX, cursorY), frame = null, hitX = cursorX, hitY = cursorY;
+        for (var depth = 0; el && el.tagName === 'IFRAME' && depth < 5; depth++) {
+          try {
+            if (!frame) frame = el;
+            var rect = el.getBoundingClientRect(); hitX -= rect.left; hitY -= rect.top;
+            el = el.contentDocument.elementFromPoint(hitX, hitY);
+          } catch (e) {
+            if(frame && frame.id==='watch-iframe')try{if(new win.URL(frame.src,win.location.href).origin==='https://play.saturncdn.net')frame.contentWindow.postMessage({saturnTV:1,type:'click',x:hitX,y:hitY},'https://play.saturncdn.net');}catch(ignore){}
+            return;
+          }
+        }
+        if (el) {
+          if (activateFullscreen(el, frame)) return;
+          el=clickableAncestor(el);
+          var link = el;
+          while (link && link !== doc && link.tagName !== 'A') link = link.parentNode;
+          if (link && link.tagName === 'A' && link.getAttribute('href')) {
+            var href = link.getAttribute('href');
+            if (allowedNavigation(href) || (!api.enabled && /^https?:/.test(new win.URL(href,win.location.href).protocol))) win.location.assign(new win.URL(href, win.location.href).href);
+            else api.popups++;
+            return;
+          }
+          clickAt(el,hitX,hitY);
+        }
+      } else {
+        if (win.requestAnimationFrame) startMotion(code);
+        else movePointer(code === 37 ? -28 : code === 39 ? 28 : 0, code === 38 ? -28 : code === 40 ? 28 : 0);
+      }
+    }
+    var held = {}, motionFrame = null, motionTime = 0, lastKeyAt = 0;
+    function movePointer(dx, dy) {
+      var nextY = cursorY + dy;
+      if(dy && doc.elementFromPoint && win.getComputedStyle){
+        var hovered=doc.elementFromPoint(cursorX,cursorY);
+        while(hovered&&hovered!==doc.body){
+          if(hovered.getBoundingClientRect&&hovered.scrollHeight>hovered.clientHeight+2 && /auto|scroll/.test(win.getComputedStyle(hovered).overflowY)){
+            var bounds=hovered.getBoundingClientRect(),old=hovered.scrollTop;
+            if((dy>0&&nextY>bounds.bottom-24)||(dy<0&&nextY<bounds.top+24)){
+              hovered.scrollTop+=dy*4;
+              if(hovered.scrollTop!==old)nextY=cursorY;
+            }
+            break;
+          }
+          hovered=hovered.parentNode;
+        }
+      }
+      if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
+      cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
+      cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
+      wakePointer();
+      if (doc.elementFromPoint && win.MouseEvent) {
+        try {
+          var hover = doc.elementFromPoint(cursorX,cursorY), x = cursorX, y = cursorY, hoverFrame=null;
+          for (var depth=0; hover && hover.tagName === 'IFRAME' && depth<5; depth++) {
+            hoverFrame=hover;
+            var box=hover.getBoundingClientRect(); x-=box.left; y-=box.top;
+            hover=hover.contentDocument.elementFromPoint(x,y);
+          }
+          if (hover) hover.dispatchEvent(new win.MouseEvent('mousemove',{bubbles:true,clientX:x,clientY:y}));
+        } catch(e) {
+          if(hoverFrame&&hoverFrame.id==='watch-iframe'&&Date.now()-lastHoverAt>=40)try{
+            if(new win.URL(hoverFrame.src,win.location.href).origin==='https://play.saturncdn.net'){
+              lastHoverAt=Date.now();hoverFrame.contentWindow.postMessage({saturnTV:1,type:'move',x:x,y:y},'https://play.saturncdn.net');
+            }
+          }catch(ignore){}
+        }
+      }
+    }
+    function stopMotion() { held = {}; motionTime = 0; }
+    function tick(time) {
+      motionFrame = null;
+      if (bar || (Date.now() - lastKeyAt > 900)) { stopMotion(); return; }
+      var dx = (held[39] ? 1 : 0) - (held[37] ? 1 : 0);
+      var dy = (held[40] ? 1 : 0) - (held[38] ? 1 : 0);
+      if (!dx && !dy) { motionTime = 0; return; }
+      var elapsed = motionTime ? Math.min(time - motionTime, 40) : 0; motionTime = time;
+      var distance = elapsed * cursorSpeed / 1000 / (dx && dy ? 1.414 : 1);
+      movePointer(dx * distance, dy * distance);
+      motionFrame = win.requestAnimationFrame(tick);
+    }
+    function startMotion(code) {
+      lastKeyAt = Date.now();
+      if (!held[code]) movePointer(code === 37 ? -28 : code === 39 ? 28 : 0,code === 38 ? -28 : code === 40 ? 28 : 0);
+      held[code] = true;
+      if (motionFrame === null) motionFrame = win.requestAnimationFrame(tick);
+    }
+    ensurePointer();
+    doc.addEventListener('DOMContentLoaded', ensurePointer);
+    doc.addEventListener('fullscreenchange', ensurePointer);
+    doc.addEventListener('webkitfullscreenchange', ensurePointer);
+    // Window capture runs before site handlers attached to document.
+    var keyTarget = win.addEventListener ? win : doc;
+    function handleKey(event) {
+      if (win !== win.top) {
+        if(event.keyCode===10009 && (doc.fullscreenElement||doc.webkitFullscreenElement||(doc.querySelector&&doc.querySelector('video')&&doc.querySelector('video').webkitDisplayingFullscreen))){event.preventDefault();event.stopImmediatePropagation();exitDisplay(true);return;}
+        try { if (win.top.__saturnTV && win.top.__saturnTV.handleKey) win.top.__saturnTV.handleKey(event); } catch (e) {
+          if(host==='play.saturncdn.net' && event.keyCode===13&&!remotePointerActive)return;
+          if(host==='play.saturncdn.net' && !doc.fullscreenElement && [37,38,39,40,13,10009,406,415,19,10252].indexOf(event.keyCode)!==-1){event.preventDefault();event.stopImmediatePropagation();win.parent.postMessage({saturnTV:1,type:'key',code:event.keyCode,repeat:!!event.repeat},'https://www.animesaturn.net');}
+        }
+        return;
+      }
+      var code = event.keyCode;
+      if ((code===10009||code===406) && (cinema||doc.fullscreenElement||doc.webkitFullscreenElement)) {event.preventDefault();event.stopImmediatePropagation();exitDisplay(true);return;}
+      // Let the player and on-screen keyboard handle Back in their own contexts.
+      var target = event.target || doc.activeElement;
+      if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
+          (target && ((/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)&&target.type!=='range') || target.isContentEditable)))) {
+        if (target && target.tagName === 'INPUT') win.setTimeout(function () {
+          if ((target.ownerDocument || doc).activeElement === target && target.blur) target.blur();
+        }, 0);
+        return;
+      }
+      var editing = target && ((/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)&&target.type!=='range') || target.isContentEditable);
+      if(!bar&&target&&target.tagName==='INPUT'&&target.type==='range'){
+        if(code===37||code===39){event.preventDefault();event.stopImmediatePropagation();target.value=Math.max(Number(target.min||0),Math.min(Number(target.max),Number(target.value)+(code===37?-10:10)));target.dispatchEvent(new win.Event('change',{bubbles:true}));return;}
+        if(code===13){event.preventDefault();event.stopImmediatePropagation();if(target.blur)target.blur();wakePointer();return;}
+        if((code===38||code===40)&&target.blur)target.blur();
+      }
+      if(!editing&&[415,19,10252].indexOf(code)!==-1&&doc.querySelector&&doc.querySelector('iframe#watch-iframe')){
+        event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)playerCommand(code===415?'play':code===19?'pause':'toggle');return;
+      }
+      // Preserve the site's Enter/default submit, then release the text field.
+      // Do not run for the Enter that initially clicks into a field.
+      if (!bar && editing && code === 13 && target.tagName === 'INPUT') {
+        win.setTimeout(function () {
+          if ((target.ownerDocument || doc).activeElement === target && target.blur) target.blur();
+          ensurePointer();
+        }, 0);
+        return;
+      }
+      if (!bar && !editing && !doc.fullscreenElement && !doc.webkitFullscreenElement && [37,38,39,40,13].indexOf(code) !== -1 && doc.elementFromPoint) {
+        event.preventDefault(); event.stopImmediatePropagation(); wakePointer();pointerKey(code); return;
+      }
+      if (code === 405 || code === 406 || code === 10009 || (bar && [37, 38, 39, 40, 13, 27, 10009].indexOf(code) !== -1)) {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (event.repeat) return;
+        if (code === 405) toggleFilter();
+        else if (code===10009 && bar && view!=='main'){switchView('main');}
+        else if (code === 406 || code === 10009) { status(); ensurePointer(); }
+        else if (code === 27) hideBar();
+        else if (code === 13) { if (doc.activeElement && buttons.indexOf(doc.activeElement) !== -1) doc.activeElement.click(); }
+        else {
+          var current=doc.activeElement, selected=null, cost=Infinity;
+          if(current && current.getBoundingClientRect){
+            var box=current.getBoundingClientRect(), cx=box.left+box.width/2, cy=box.top+box.height/2;
+            for(var j=0;j<buttons.length;j++){var b=buttons[j];if(b.disabled||b===current)continue;var r=b.getBoundingClientRect(),dx=r.left+r.width/2-cx,dy=r.top+r.height/2-cy;
+              var along=code===37?-dx:code===39?dx:code===38?-dy:dy, across=(code===37||code===39)?Math.abs(dy):Math.abs(dx);
+              if(along>5 && along+across*3<cost){selected=b;cost=along+across*3;}
+            }
+          } else {var pos=buttons.indexOf(current),step=(code===37||code===38)?-1:1;for(var n=0;n<buttons.length;n++){pos=(pos+step+buttons.length)%buttons.length;if(!buttons[pos].disabled){selected=buttons[pos];break;}}}
+          if(selected){selected.focus();if(selected.scrollIntoView)selected.scrollIntoView({block:'nearest'});}
+        }
+      }
+    }
+    api.handleKey = handleKey;
+    keyTarget.addEventListener('keydown', handleKey, true);
+    api.releaseKey = function (code) { delete held[code]; };
+    keyTarget.addEventListener('keyup', function(event) {
+      delete held[event.keyCode];
+      if (win !== win.top) { try { win.top.__saturnTV.releaseKey(event.keyCode); } catch(e) {if(host==='play.saturncdn.net')win.parent.postMessage({saturnTV:1,type:'keyup',code:event.keyCode},'https://www.animesaturn.net');} }
+    }, true);
+    if(win.addEventListener)win.addEventListener('message',function(event){
+      var data=event.data;if(!data||data.saturnTV!==1)return;
+      if(win===win.top){
+        var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');
+        if(!frame||event.source!==frame.contentWindow||event.origin!=='https://play.saturncdn.net')return;
+        if(data.type==='exitMenu')exitDisplay(true);
+        else if(data.type==='playerStatus'){
+          playerReport=data;updateTransport(data);
+          if(!data.passive&&message)tell(data.error?'Lettore: '+String(data.error).slice(0,150):!data.video?'Lettore risponde, ma il video non è stato creato.':data.state==='buffering'?'Caricamento del video…':data.paused?'Lettore in pausa o in attesa di Play.':'Riproduzione: '+Math.floor(data.time)+' secondi, '+data.engine+' (stato '+data.ready+').');
+        }
+        else if(data.type==='fullscreen')fullscreen(frame);
+        else if(data.type==='key'&&[37,38,39,40,13,10009,406,415,19,10252].indexOf(data.code)!==-1)handleKey({keyCode:data.code,repeat:!!data.repeat,target:frame,preventDefault:function(){},stopImmediatePropagation:function(){}});
+        else if(data.type==='keyup')api.releaseKey(data.code);
+      }else if(host==='play.saturncdn.net' && event.source===win.parent && event.origin==='https://www.animesaturn.net'){
+        if(['play','pause','toggle','status','seekBack','seekForward','seek'].indexOf(data.type)!==-1){
+          if(data.type==='seek'&&(typeof data.value!=='number'||!isFinite(data.value)||data.value<0))return;
+          if(typeof data.enabled==='boolean')api.enabled=data.enabled;
+          var video=doc.querySelector&&doc.querySelector('video');
+          if(data.type!=='status'){
+            remotePointerActive=true;
+            try{var started=controlVideo(video,data.type,data.value);if(started&&started.then)started.then(function(){reportPlayer();},function(e){reportPlayer(e.name+': '+e.message);});else reportPlayer();}catch(e){reportPlayer(e.name+': '+e.message);}
+          }else reportPlayer();
+        }
+        else if((data.type==='click'||data.type==='move')&&typeof data.x==='number'&&typeof data.y==='number'&&isFinite(data.x)&&isFinite(data.y)&&data.x>=0&&data.y>=0&&data.x<=win.innerWidth&&data.y<=win.innerHeight){
+          remotePointerActive=true;
+          var el=doc.elementFromPoint(data.x,data.y);if(el){
+            if(data.type==='move'){if(win.MouseEvent)el.dispatchEvent(new win.MouseEvent('mousemove',{bubbles:true,clientX:data.x,clientY:data.y}));}
+            else if(!activateFullscreen(el)){try{clickAt(el,data.x,data.y);}catch(e){reportPlayer(e.message);}}
+          }
+        }
+      }
+    });
+    keyTarget.addEventListener('blur', stopMotion, true);
+    scheduleScan();
+    scan(doc);
+    return api;
+  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = {hostBlocked: hostBlocked, install: install};
+  else install(root);
+}(typeof window === 'undefined' ? this : window));
