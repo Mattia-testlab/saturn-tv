@@ -27,7 +27,7 @@ function fixture(saved) {
 }
 test('blue opens the toolbar; arrows skip unavailable bookmark; OK refreshes; Back restores focus', () => {
   const f = fixture(); const oldFocus = {focus() { f.doc.activeElement = this; }}; oldFocus.focus();
-  f.key(406); const b = f.buttons(); assert.equal(b.length, 10); assert.equal(f.doc.activeElement, b[0]);
+  f.key(406); const b = f.buttons(); assert.equal(b.length, 12); assert.equal(f.doc.activeElement, b[0]);
   f.key(39); f.key(39); assert.equal(f.doc.activeElement.textContent, 'Aggiorna');
   f.key(13); assert.deepEqual(f.calls, ['reload']);
   b[4].focus(); f.key(39); assert.equal(f.doc.activeElement, b[6]);
@@ -55,7 +55,7 @@ test('storage failures produce feedback without navigating', () => {
 });
 test('Back opens and closes toolbar without navigating, but respects fullscreen and text fields', () => {
   const f = fixture();
-  f.key(10009); assert.equal(f.buttons().length, 10);
+  f.key(10009); assert.equal(f.buttons().length, 12);
   f.key(10009); assert.equal(f.doc.body.children.length, 0);
   assert.deepEqual(f.calls, []);
   f.doc.fullscreenElement = {};

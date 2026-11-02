@@ -1,4 +1,4 @@
-/* Saturn TV 0.3.1 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.4.0 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.3.1'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.0'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -137,7 +137,7 @@
     function scheduleScan() {
       if (queued) return;
       queued = true;
-      win.setTimeout(function () { queued = false; scan(doc); }, 100);
+      win.setTimeout(function () { queued = false; scan(doc); if (api.enabled && autoOverlay && !cinema) { for (var n = 0; n < 4 && hideOverlay(true); n++) {} } }, 100);
     }
     doc.addEventListener('load', function (event) {
       if (event.target && event.target.tagName === 'IFRAME') {
@@ -145,10 +145,17 @@
       }
     }, true);
     if (win.MutationObserver) {
-      new win.MutationObserver(scheduleScan).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src']});
+      new win.MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i++) {
+          var target = records[i].target, own = false;
+          while (target && target !== doc) { if (/^saturn-/.test(target.id || '')) { own = true; break; } target = target.parentNode; }
+          if (!own) { scheduleScan(); return; }
+        }
+      }).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src','style','class']});
     }
     var bar = null, buttons = [], previousFocus = null, message = null;
-    var hiddenOverlays = [];
+    var hiddenOverlays = [], autoOverlay = true, cinema = null;
+    try { autoOverlay = win.sessionStorage.getItem('saturn-auto-overlay') !== '0'; } catch (e) {}
     function overlayCandidate(el) {
       if (!el || el === doc.body || el === doc.documentElement || !win.getComputedStyle || !el.getBoundingClientRect) return false;
       if (/^(VIDEO|AUDIO|INPUT|BUTTON)$/.test(el.tagName) || /^saturn-/.test(el.id || '')) return false;
@@ -159,28 +166,33 @@
       if (el.tagName === 'IFRAME' && /\/embed\/|turnstile|recaptcha/i.test(el.getAttribute('src') || '')) return false;
       return true;
     }
-    function hideOverlay() {
+    function hideOverlay(automatic) {
       if (!doc.querySelectorAll || !win.getComputedStyle) { tell('Rimozione non disponibile.'); return; }
       var nodes = doc.querySelectorAll('div,section,aside,iframe,dialog'), best = null, score = -1;
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
         if (!overlayCandidate(el)) continue;
+        if (automatic && el.querySelector && el.querySelector('form,[role=dialog]')) continue;
         var inside = el, own = false;
         while (inside && inside !== doc.body) { if (/^saturn-/.test(inside.id || '')) own = true; inside = inside.parentNode; }
         if (own) continue;
         var css = win.getComputedStyle(el), z = parseInt(css.zIndex, 10) || 0;
         if (z > score) { best = el; score = z; }
       }
-      if (!best) { tell('Nessun overlay separabile dal player trovato.'); return; }
+      if (!best) { if (!automatic) tell('Nessun overlay separabile dal player trovato.'); return false; }
       hiddenOverlays.push({element:best, style:best.getAttribute('style')});
       best.style.setProperty('display', 'none', 'important');
-      tell('Riquadro nascosto. Se era utile, scegli Annulla rimozione.');
+      api.popups++;
+      if (!automatic) tell('Riquadro nascosto. Se era utile, scegli Annulla rimozione.');
+      return true;
     }
     function undoOverlay() {
+      autoOverlay = false;
+      try { win.sessionStorage.setItem('saturn-auto-overlay', '0'); } catch (e) {}
       var item = hiddenOverlays.pop();
       if (!item) { tell('Nessuna rimozione da annullare.'); return; }
       if (item.style === null) item.element.removeAttribute('style'); else item.element.setAttribute('style',item.style);
-      tell('Riquadro ripristinato.');
+      tell('Riquadro ripristinato. Rimozione automatica disattivata per questa sessione.');
     }
 
     var bookmarkKey = 'saturn-bookmark';
@@ -199,7 +211,44 @@
       catch (e) { tell('Impossibile salvare la preferenza del filtro.'); return; }
       win.location.reload();
     }
+    function exitCinema() {
+      if (!cinema) return;
+      if (cinema.style === null) cinema.el.removeAttribute('style'); else cinema.el.setAttribute('style',cinema.style);
+      cinema = null; ensurePointer();
+    }
+    function fullscreen() {
+      if (cinema) { exitCinema(); return; }
+      var nodes = doc.querySelectorAll('video,iframe[src*="/embed/"]'), best = null, area = 0;
+      for (var i = 0; i < nodes.length; i++) {
+        var rect = nodes[i].getBoundingClientRect(), a = rect.width * rect.height;
+        if (a > area) { area = a; best = nodes[i]; }
+      }
+      if (!best) { tell('Apri prima un episodio: nessun lettore riconosciuto.'); return; }
+      hideBar();
+      function fallback() {
+        if (cinema) return;
+        cinema = {el:best, style:best.getAttribute('style')};
+        best.style.setProperty('position','fixed','important');
+        var values = {top:'0',left:'0',width:'100vw',height:'100vh',maxWidth:'none',maxHeight:'none',zIndex:'2147483644',background:'#000',border:'0'};
+        for (var key in values) best.style.setProperty(key.replace(/[A-Z]/g,function(c){return '-'+c.toLowerCase();}),values[key],'important');
+        ensurePointer();
+      }
+      try {
+        var request = best.requestFullscreen || best.webkitRequestFullscreen;
+        if (!request) { fallback(); return; }
+        var promise = request.call(best);
+        if (promise && promise.catch) promise.catch(fallback);
+        else win.setTimeout(function(){if (!doc.fullscreenElement && !doc.webkitFullscreenElement) fallback();},300);
+      } catch(e) { fallback(); }
+    }
     api.actions = {
+      fullscreen: fullscreen,
+      autoOverlay: function () {
+        autoOverlay = !autoOverlay;
+        try { win.sessionStorage.setItem('saturn-auto-overlay', autoOverlay ? '1' : '0'); } catch(e) {}
+        tell('Overlay automatici: ' + (autoOverlay ? 'attivi' : 'spenti'));
+        if (autoOverlay) scheduleScan();
+      },
       overlay: hideOverlay,
       undoOverlay: undoOverlay,
       reload: function () { win.location.reload(); },
@@ -233,6 +282,7 @@
     function status() {
       if (win !== win.top || !doc.body) return;
       if (bar) { hideBar(); return; }
+      stopMotion();
       previousFocus = doc.activeElement;
       if (previousFocus && /^(INPUT|TEXTAREA|SELECT)$/.test(previousFocus.tagName)) previousFocus = null;
       bar = doc.createElement('section');
@@ -245,7 +295,7 @@
       var stats = doc.createElement('p');
       stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
       bar.appendChild(stats);
-      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Chiudi barra', 'close']];
+      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Chiudi barra', 'close']];
       for (var i = 0; i < specs.length; i++) {
         var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
         btn.setAttribute('data-saturn-action', specs[i][1]);
@@ -279,7 +329,7 @@
         doc.body.appendChild(menuButton);
       }
       pointer.style.left = cursorX + 'px'; pointer.style.top = cursorY + 'px';
-      var hidden = bar || doc.fullscreenElement || doc.webkitFullscreenElement;
+      var hidden = bar || cinema || doc.fullscreenElement || doc.webkitFullscreenElement;
       pointer.style.display = hidden ? 'none' : 'block';
       if (menuButton) menuButton.style.display = hidden ? 'none' : 'block';
       return true;
@@ -307,14 +357,35 @@
           if (el.focus) el.focus(); if (el.click) el.click();
         }
       } else {
-        var dx = code === 37 ? -28 : code === 39 ? 28 : 0;
-        var dy = code === 38 ? -28 : code === 40 ? 28 : 0;
-        var nextY = cursorY + dy;
-        if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
-        cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
-        cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
-        ensurePointer();
+        if (win.requestAnimationFrame) startMotion(code);
+        else movePointer(code === 37 ? -28 : code === 39 ? 28 : 0, code === 38 ? -28 : code === 40 ? 28 : 0);
       }
+    }
+    var held = {}, motionFrame = null, motionTime = 0, lastKeyAt = 0;
+    function movePointer(dx, dy) {
+      var nextY = cursorY + dy;
+      if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
+      cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
+      cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
+      ensurePointer();
+    }
+    function stopMotion() { held = {}; motionTime = 0; }
+    function tick(time) {
+      motionFrame = null;
+      if (bar || (Date.now() - lastKeyAt > 900)) { stopMotion(); return; }
+      var dx = (held[39] ? 1 : 0) - (held[37] ? 1 : 0);
+      var dy = (held[40] ? 1 : 0) - (held[38] ? 1 : 0);
+      if (!dx && !dy) { motionTime = 0; return; }
+      var elapsed = motionTime ? Math.min(time - motionTime, 40) : 0; motionTime = time;
+      var distance = elapsed * 0.5 / (dx && dy ? 1.414 : 1);
+      movePointer(dx * distance, dy * distance);
+      motionFrame = win.requestAnimationFrame(tick);
+    }
+    function startMotion(code) {
+      lastKeyAt = Date.now();
+      if (!held[code]) movePointer(code === 37 ? -28 : code === 39 ? 28 : 0,code === 38 ? -28 : code === 40 ? 28 : 0);
+      held[code] = true;
+      if (motionFrame === null) motionFrame = win.requestAnimationFrame(tick);
     }
     ensurePointer();
     doc.addEventListener('DOMContentLoaded', ensurePointer);
@@ -328,6 +399,7 @@
         return;
       }
       var code = event.keyCode;
+      if (code === 10009 && cinema) { event.preventDefault(); event.stopImmediatePropagation(); exitCinema(); return; }
       // Let the player and on-screen keyboard handle Back in their own contexts.
       var target = event.target || doc.activeElement;
       if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
@@ -368,6 +440,13 @@
     }
     api.handleKey = handleKey;
     keyTarget.addEventListener('keydown', handleKey, true);
+    api.releaseKey = function (code) { delete held[code]; };
+    keyTarget.addEventListener('keyup', function(event) {
+      delete held[event.keyCode];
+      if (win !== win.top) { try { win.top.__saturnTV.releaseKey(event.keyCode); } catch(e) {} }
+    }, true);
+    keyTarget.addEventListener('blur', stopMotion, true);
+    scheduleScan();
     scan(doc);
     return api;
   }

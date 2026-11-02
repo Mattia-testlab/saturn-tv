@@ -78,3 +78,20 @@ AnimeSaturn trovate nei file consultati riguardano animesaturn.cx (2024), non .a
 Non sono state importate né eseguite regole legacy non verificate. Il progetto non
 include il motore uBlock e non possiede le API di filtraggio di rete delle estensioni.
 Riferimenti: https://github.com/uBlockOrigin/uAssets e https://github.com/easylist/easylist
+
+## 0.4.0
+
+- Overlay automatici attivi per default. Usa la stessa euristica geometrica del
+  comando manuale verificato dall’utente; ignora riquadri con video, embed, CAPTCHA
+  noti, login e form/dialoghi annidati. Non è un riconoscimento certo della pubblicità:
+  può nascondere un grande riquadro legittimo. Annulla rimozione lo ripristina e
+  sospende l’automatico per la sessione. Il pulsante ON/OFF lo riattiva senza ricaricare.
+- Cursore continuo a requestAnimationFrame tenendo una freccia, fermato al rilascio
+  o dopo 900 ms senza eventi (protezione da keyup perso). Movimento 500 px/s,
+  diagonali normalizzate, passo singolo conservato. Nei browser senza rAF resta il passo.
+- Schermo intero nella barra cerca il più grande video/embed visibile. Prova l’API
+  nativa e, se rifiutata, allarga il riquadro con CSS reversibile. Indietro esce dalla
+  modalità CSS. Non cambia codec, proporzioni interne o controlli di player esterni.
+- Verificati 20 test Node e 21 controlli su fixture in un browser reale, inclusi
+  automatico/annulla, pressione continua/rilascio e fallback video/ripristino.
+  La riproduzione e lo schermo intero nativo sulla Samsung richiedono prova fisica.
