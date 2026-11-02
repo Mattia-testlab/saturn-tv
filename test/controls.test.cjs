@@ -1,7 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const {install} = require('../saturn.js');
-function fixture(saved) {
+function fixture(saved, media) {
   const events = {}, calls = [];
   const storage = new Map(saved ? [['saturn-bookmark', JSON.stringify(saved)]] : []);
   let doc;
@@ -17,36 +17,31 @@ function fixture(saved) {
     focus() { doc.activeElement = this; }
     click() { this.handlers.click.call(this, {preventDefault() {}, stopPropagation() {}}); }
   }
-  doc = {title: 'Episodio 7', body: new Element('body'), addEventListener(k, f) { events[k] = f; }, querySelectorAll() { return []; }, createElement(tag) { return new Element(tag); }};
+  doc = {title: 'Episodio 7', body: new Element('body'), addEventListener(k, f) { events[k] = f; }, querySelectorAll(selector) { return selector==='video' && media ? [media] : []; }, createElement(tag) { return new Element(tag); }};
   const win = {document: doc, Node: Element, URL, Promise, location: {hostname: 'animesaturn.at', href: 'https://animesaturn.at/watch/show/ep-7', reload() { calls.push('reload'); }, assign(url) { calls.push(url); }}, history: {back() { calls.push('back'); }, forward() { calls.push('forward'); }}, sessionStorage: {getItem() {}, setItem() {}}, localStorage: {getItem(k) { return storage.get(k); }, setItem(k,v) { storage.set(k,v); }}, open() {}, setTimeout() {}};
   win.top = win;
   const api = install(win);
   function key(code) { events.keydown({keyCode: code, preventDefault() {}, stopImmediatePropagation() {}}); }
   function buttons() { return doc.body.children[0].children.filter(n => n.tagName === 'BUTTON'); }
-  return {api, win, doc, calls, key, buttons};
+  return {api, win, doc, calls, key, buttons, storage, events};
 }
-test('blue opens the toolbar; arrows skip unavailable bookmark; OK refreshes; Back restores focus', () => {
-  const f = fixture(); const oldFocus = {focus() { f.doc.activeElement = this; }}; oldFocus.focus();
-  f.key(406); const b = f.buttons(); assert.equal(b.length, 14); assert.equal(f.doc.activeElement, b[0]);
-  f.key(39); f.key(39); assert.equal(f.doc.activeElement.textContent, 'Aggiorna');
-  f.key(13); assert.deepEqual(f.calls, ['reload']);
-  b[4].focus(); f.key(39); assert.equal(f.doc.activeElement, b[6]);
-  f.key(10009); assert.equal(f.doc.body.children.length, 0); assert.equal(f.doc.activeElement, oldFocus);
+test('quick menu opens, settings refresh works, Back restores focus', () => {
+ const f=fixture(), old={focus(){f.doc.activeElement=this;}};old.focus();f.key(406);
+ assert.equal(f.buttons().length,9);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'resume');
+ f.api.actions.settings();let reload=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='reload');reload.focus();f.key(13);assert.deepEqual(f.calls,['reload']);
+ f.key(10009);assert.equal(f.buttons().length,9);f.key(10009);assert.equal(f.doc.body.children.length,0);
 });
 test('browser navigation controls call history and canonical home', () => {
   const f = fixture(); f.api.actions.back(); f.api.actions.forward(); f.api.actions.home();
   assert.deepEqual(f.calls, ['back', 'forward', 'https://animesaturn.at/']);
 });
-test('saving a page enables its button and reopens the saved episode', () => {
-  const f = fixture(); f.key(406); const b = f.buttons(); assert.equal(b[5].disabled, true);
-  b[4].click(); assert.equal(b[5].disabled, false); b[5].click();
-  assert.equal(f.calls[0], f.win.location.href);
+test('bookmark fallback can reopen saved page when no recent episode exists',()=>{
+ const f=fixture();f.storage.delete('saturn-last');f.api.actions.save();f.api.actions.resume();assert.equal(f.calls[0],f.win.location.href);
 });
-test('stored bookmarks reject foreign domains and dangerous schemes', () => {
-  for (const url of ['javascript:alert(1)', 'https://animesaturn.at.evil.test/', 'http://animesaturn.at/', 'https://user:password@animesaturn.at/']) {
-    const f = fixture({url}); f.key(406); assert.equal(f.buttons()[5].disabled, true);
-    f.api.actions.resume(); assert.equal(f.calls.length, 0);
-  }
+test('invalid stored URLs cannot be resumed',()=>{
+ for(const url of ['javascript:alert(1)','https://animesaturn.at.evil.test/','http://animesaturn.at/','https://user:password@animesaturn.at/']){
+  const f=fixture({url});f.storage.delete('saturn-last');f.key(406);assert.equal(f.buttons()[0].disabled,true);f.api.actions.resume();assert.equal(f.calls.length,0);
+ }
 });
 test('storage failures produce feedback without navigating', () => {
   const f = fixture(); f.key(406); f.win.localStorage.setItem = () => { throw Error('denied'); };
@@ -55,7 +50,7 @@ test('storage failures produce feedback without navigating', () => {
 });
 test('Back opens and closes toolbar without navigating, but respects fullscreen and text fields', () => {
   const f = fixture();
-  f.key(10009); assert.equal(f.buttons().length, 14);
+  f.key(10009); assert.equal(f.buttons().length, 9);
   f.key(10009); assert.equal(f.doc.body.children.length, 0);
   assert.deepEqual(f.calls, []);
   f.doc.fullscreenElement = {};
@@ -98,4 +93,21 @@ test('Black Clover shortcut in toolbar opens the verified episode 50', () => {
   const shortcut=f.buttons().find(b=>b.getAttribute('data-saturn-action')==='blackClover50');
   assert.equal(shortcut.textContent,'Black Clover · episodio 50');
   shortcut.click();assert.deepEqual(f.calls,['https://animesaturn.at/watch/black-clover-jgswge/ep-50']);
+});
+
+test('favorites preserve multiple pages and reject unsafe stored links',()=>{
+ const f=fixture();f.api.actions.addFavorite();f.win.location.href='https://animesaturn.at/watch/second/ep-1';f.api.actions.addFavorite();
+ assert.equal(JSON.parse(f.storage.get('saturn-favorites')).length,2);
+ f.storage.set('saturn-favorites',JSON.stringify([{url:'javascript:alert(1)',title:'bad'}]));f.api.actions.favorites();assert.equal(f.buttons().length,2);
+});
+test('speed preference is saved, next episode only follows real same-series links',()=>{
+ const f=fixture();f.api.actions.speed();assert.equal(JSON.parse(f.storage.get('saturn-speed')),700);
+ const links=['/watch/show/ep-6','/watch/show/ep-9','/watch/other/ep-8'];f.doc.querySelectorAll=()=>links.map(url=>({getAttribute(){return url;}}));
+ f.api.actions.previousEpisode();f.api.actions.nextEpisode();assert.deepEqual(f.calls,['https://animesaturn.at/watch/show/ep-6','https://animesaturn.at/watch/show/ep-9']);
+});
+
+test('accessible video progress is saved without persisting unrelated page data',()=>{
+ const handlers={}, video={readyState:0,addEventListener(k,fn){handlers[k]=fn;},currentTime:42};
+ const f=fixture(null,video);handlers.timeupdate();const progress=JSON.parse(f.storage.get('saturn-progress'));
+ assert.equal(progress[f.win.location.href],42);
 });

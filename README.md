@@ -1,117 +1,86 @@
-# Saturn TV 0.3.0
+# Saturn TV 0.5.0
 
-Modulo sperimentale per AnimeSaturn su TizenBrew, pensato per Samsung UE50AU9070UXZT.
-Non è un browser completo e non equivale a uBlock Origin.
+Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
+Il modulo non equivale a un browser completo o a uBlock Origin.
 
-## Installazione e aggiornamenti
+## Installazione
 
-Nel gestore moduli TizenBrew scegliere Aggiungi modulo GitHub e inserire:
+Gestore moduli TizenBrew → Aggiungi modulo GitHub:
 
 ```
 Mattia-testlab/saturn-tv
 ```
 
-Non aggiungere un tag se si desiderano gli aggiornamenti. Riavviare completamente
-TizenBrew/TV per svuotare la cache del codice del servizio. La barra e il pulsante
-Menu mostrano la versione effettivamente eseguita. GitHub/jsDelivr possono avere cache.
-Il Mac non deve rimanere acceso; è necessaria la connessione Internet.
+I nomi con `@v...` restano fissi a quella versione. Il Mac può rimanere spento durante
+l'uso, ma occorre Internet per scaricare il modulo. Le cache GitHub/jsDelivr e del
+servizio TizenBrew possono ritardare gli aggiornamenti. Impostazioni → Versione e
+aggiornamenti mostra la versione realmente in esecuzione; non promette un aggiornamento
+forzato. Il riavvio della pagina non svuota necessariamente la cache del servizio.
 
-## Comandi
+## Barra e telecomando
 
-- Frecce: muovono il cursore; ai bordi superiore/inferiore scorrono la pagina.
-- OK: attiva l'elemento sotto il cursore. I link del sito sono aperti direttamente.
-- Indietro o Blu: aprono/chiudono la barra.
-- Menu in basso a destra: apre la barra anche senza tasto colorato.
-- Nella barra: frecce per selezionare, OK per eseguire.
-- Dopo OK nella ricerca, il campo perde il focus dopo l'evento, preservando l'invio.
-- Indietro nei campi di testo lascia chiudere la tastiera e rilascia il focus.
-- In pieno schermo i tasti sono lasciati al player. Home del telecomando resta di sistema.
-- Pagina precedente: pulsante Indietro nella barra.
-- Salva pagina conserva un collegamento, non il minuto del video.
+- Indietro o Blu aprono la barra; dal menu principale la richiudono.
+- Indietro nelle impostazioni/preferiti riporta al menu principale.
+- Frecce nella barra seguono la disposizione visiva dei pulsanti; OK esegue.
+- Menu rapido: Riprendi, Cerca, puntata precedente/successiva, Schermo intero,
+  Preferiti, Black Clover episodio 50, Impostazioni, Chiudi.
+- Le puntate adiacenti si ricavano dai link realmente presenti per la serie corrente;
+  senza link il relativo comando è disabilitato. Non vengono inventati URL.
+- Riprendi conserva automaticamente l'ultima pagina /watch/. Se il video è accessibile,
+  registra il secondo ogni 5 secondi e lo ripristina dopo il caricamento dei metadati.
+  Non riprende a meno di 15 secondi dalla fine. Player esterni possono impedire il salvataggio.
+- Preferiti conserva fino a 12 collegamenti; l'aggiunta di un tredicesimo sostituisce
+  il meno recente. Nessun account o invio della cronologia ad altri servizi.
+- Velocità del cursore lenta/media/veloce conservata sul dispositivo tra le pagine.
+- Puntatore a requestAnimationFrame, diagonali normalizzate, stop al rilascio e watchdog
+  a 900 ms senza eventi. Si nasconde dopo 3,5 secondi senza uso.
+- Menu visibile in basso a destra; versione e dettagli tecnici sono nelle impostazioni.
 
-## Protezioni
+## Video
 
-Blocca window.open, impedisce che venga sostituito con semplice assegnazione,
-blocca link/form verso domini esterni e nuove finestre quando il filtro è attivo.
-Protegge anche form.submit(), che non genera un evento submit.
-Filtra script, iframe, fetch e XHR di un elenco limitato di domini pubblicitari.
-L'elenco include subsignsodaic.com e 073m.com osservati durante l'ispezione del sito.
-Rimuove il wrapper fisso immediato di un iframe identificato come pubblicitario
-soltanto se non contiene altri iframe, audio o video.
-Non rimuove genericamente dialoghi, codici QR, CAPTCHA o player.
+Il clic su controlli fullscreen riconoscibili (Plyr, Video.js, JW Player, classi e
+etichette fullscreen/schermo intero) prova l'API nativa. Se rifiutata, allarga il video
+/embed con CSS reversibile. Nel fallback il puntatore resta utilizzabile, ci sono un
+pulsante di uscita e Play/Pausa se il video è accessibile. Indietro ripristina la pagina.
+I frame dello stesso dominio possono inoltrare i tasti al modulo principale; i player
+cross-origin restano soggetti ai limiti del browser. Nessuna modifica a DRM o codec.
 
-## Limiti e stato reale
+## Overlay e protezione
 
-- Un annuncio già eseguito prima dell'iniezione può sfuggire al filtro.
-- Nessuna intercettazione universale di location.href, redirect HTTP o richieste di rete.
-- La modalità document-start è disabilitata: il percorso TizenBrew esaminato presenta
-  una discordanza fra nome semplice/fullName nel messaggio di avvio.
-- Il cursore genera clic sintetici: alcuni player li rifiutano. I frame di altri domini
-  non sono controllabili; nei frame dello stesso dominio i tasti sono inoltrati al modulo principale.
-- I link esterni legittimi sono bloccati quando il filtro è attivo.
-- La finestra QR con conto alla rovescia segnalata sulla TV non è stata riprodotta
-  esattamente sul Mac: la sua eliminazione NON è ancora dimostrata.
-- Verificati 20 test Node e 12 controlli DOM in un browser reale su fixture locale.
-  Questi non dimostrano compatibilità con la tastiera Tizen o riproduzione video reale.
+- Blocca window.open e ne protegge il riferimento da semplice assegnazione successiva.
+- Blocca link/form pubblicitari, nuove finestre e form.submit() esterni col filtro attivo.
+- Filtra script/iframe/fetch/XHR di un elenco limitato di domini pubblicitari osservati.
+- Le scansioni sono raggruppate e limitate alle parti modificate quando possibile.
+- L'automatico interviene su riquadri riconosciuti come pubblicitari o ricordati da una
+  rimozione manuale. Non elimina ogni grande elemento fisso sconosciuto.
+- Impostazioni → Nascondi overlay e ricordalo: nasconde il riquadro e ne conserva una
+  firma locale (tag, id, classi e indirizzo del primo iframe), se disponibile.
+- Annulla rimozione ripristina lo stile, elimina la firma e sospende l'automatico nella
+  sessione. Nessun cambio impostazioni quando non esiste una rimozione da annullare.
+- Un riquadro senza firma stabile potrebbe richiedere una nuova rimozione. Firme e
+  classificazione possono dare falsi positivi: il ripristino resta necessario.
 
-## Test
+La modalità document-start resta disabilitata per un problema nel percorso di lancio
+TizenBrew esaminato. Script già eseguiti prima dell'iniezione e redirect tramite
+location.href o HTTP non sono intercettati universalmente. Il popup QR specifico della
+TV richiede una verifica sul dispositivo. Non sono state importate le vecchie regole
+animesaturn.cx di uAssets sul nuovo dominio .at senza verificarne l'applicabilità.
+
+## Verifica riproducibile
 
 ```
 node --check saturn.js
 node --test test/*.test.cjs
+node test/build-browser-fixture.cjs
+python3 -m http.server 8766 --bind 127.0.0.1 --directory test/.browser
 ```
 
-`saturn.js` è la sorgente; `saturn-0.3.0.js` è la copia identica distribuita.
+Aprire http://127.0.0.1:8766/ nel browser. La fixture modifica SOLO la propria copia
+del controllo dominio per consentire localhost; il modulo distribuito non lo accetta.
+La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
+24 test Node e 22 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
+player reale e pubblicità reale non sono sostituiti da questi test.
+
+`saturn.js` è la sorgente; `saturn-0.5.0.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
-Nessuna dipendenza o telemetria aggiunta dal modulo; il sito mantiene le proprie richieste non filtrate.
-
-## 0.3.1: rimozione manuale degli overlay
-
-Indietro/Blu → Nascondi overlay nasconde il riquadro fisso grande con z-index più alto,
-escludendo l’interfaccia Saturn, video, audio, iframe /embed/, CAPTCHA noti e login.
-Annulla rimozione ripristina esattamente lo stile precedente. È un’azione manuale:
-un riquadro legittimo potrebbe essere selezionato, per questo è reversibile.
-Non garantisce la rimozione di finestre native o interni di player cross-origin.
-
-Sono state consultate le liste pubbliche uBlock/uAssets ed EasyList. Le sole regole
-AnimeSaturn trovate nei file consultati riguardano animesaturn.cx (2024), non .at.
-Non sono state importate né eseguite regole legacy non verificate. Il progetto non
-include il motore uBlock e non possiede le API di filtraggio di rete delle estensioni.
-Riferimenti: https://github.com/uBlockOrigin/uAssets e https://github.com/easylist/easylist
-
-## 0.4.0
-
-- Overlay automatici attivi per default. Usa la stessa euristica geometrica del
-  comando manuale verificato dall’utente; ignora riquadri con video, embed, CAPTCHA
-  noti, login e form/dialoghi annidati. Non è un riconoscimento certo della pubblicità:
-  può nascondere un grande riquadro legittimo. Annulla rimozione lo ripristina e
-  sospende l’automatico per la sessione. Il pulsante ON/OFF lo riattiva senza ricaricare.
-- Cursore continuo a requestAnimationFrame tenendo una freccia, fermato al rilascio
-  o dopo 900 ms senza eventi (protezione da keyup perso). Movimento 500 px/s,
-  diagonali normalizzate, passo singolo conservato. Nei browser senza rAF resta il passo.
-- Schermo intero nella barra cerca il più grande video/embed visibile. Prova l’API
-  nativa e, se rifiutata, allarga il riquadro con CSS reversibile. Indietro esce dalla
-  modalità CSS. Non cambia codec, proporzioni interne o controlli di player esterni.
-- Verificati 20 test Node e 21 controlli su fixture in un browser reale, inclusi
-  automatico/annulla, pressione continua/rilascio e fallback video/ripristino.
-  La riproduzione e lo schermo intero nativo sulla Samsung richiedono prova fisica.
-
-## 0.4.1: rifinitura dei comandi video
-
-- Il clic su controlli fullscreen riconoscibili (Plyr, Video.js, JW Player, classi e
-  etichette fullscreen/schermo intero) usa il percorso nativo con fallback CSS anche
-  senza passare dalla barra. Riconosce le icone figlie del pulsante.
-- Il puntatore attraversa fino a cinque iframe dello stesso dominio; nei frame
-  esterni resta il limite della same-origin policy. Non promette supporto a pulsanti
-  senza etichette/classi riconoscibili o in player cross-origin.
-- Il movimento genera mousemove per rivelare i controlli dei player compatibili.
-- La barra mostra lo stato ON/OFF effettivo degli overlay e consente tre velocità:
-  lenta (350 px/s), media (500 px/s), veloce (700 px/s).
-- Verificati 20 test Node e 25 controlli browser su fixture, incluso clic sull'icona
-  di un pulsante fullscreen con rifiuto dell'API nativa e fallback CSS.
-  Il pulsante specifico di AnimeSaturn e la riproduzione sulla Samsung richiedono prova.
-
-## 0.4.2
-
-Aggiunto nella barra il collegamento Black Clover · episodio 50. URL verificato
-nella lista episodi pubblica: https://animesaturn.at/watch/black-clover-jgswge/ep-50
+Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets

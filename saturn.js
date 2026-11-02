@@ -1,4 +1,4 @@
-/* Saturn TV 0.4.2 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.5.0 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.4.2'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.5.0'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -115,7 +115,8 @@
       };
     }
     function scan(container) {
-      var nodes = container.querySelectorAll('script[src],iframe[src]');
+      var nodes=Array.prototype.slice.call(container.querySelectorAll('script[src],iframe[src]'));
+      if(container.tagName && /^(SCRIPT|IFRAME)$/.test(container.tagName))nodes.unshift(container);
       for (var i = 0; i < nodes.length; i++) {
         var node = nodes[i];
         if (resource(node) && node.parentNode) {
@@ -134,11 +135,16 @@
         }
       }
     }
-    var queued = false;
-    function scheduleScan() {
+    var queued = false, dirtyRoots=[];
+    function scheduleScan(root) {
+      if(root && root.querySelectorAll && dirtyRoots.indexOf(root)===-1)dirtyRoots.push(root);
       if (queued) return;
       queued = true;
-      win.setTimeout(function () { queued = false; scan(doc); if (api.enabled && autoOverlay && !cinema) { for (var n = 0; n < 4 && hideOverlay(true); n++) {} } }, 100);
+      win.setTimeout(function () {
+        queued=false;var roots=dirtyRoots.length?dirtyRoots:[doc];dirtyRoots=[];
+        if(roots.length>12)roots=[doc];
+        for(var i=0;i<roots.length;i++){scan(roots[i]);bindProgress(roots[i]);if(api.enabled&&autoOverlay&&!cinema)hideOverlay(true,roots[i]);}
+      }, 200);
     }
     doc.addEventListener('load', function (event) {
       if (event.target && event.target.tagName === 'IFRAME') {
@@ -150,12 +156,32 @@
         for (var i = 0; i < records.length; i++) {
           var target = records[i].target, own = false;
           while (target && target !== doc) { if (/^saturn-/.test(target.id || '')) { own = true; break; } target = target.parentNode; }
-          if (!own) { scheduleScan(); return; }
+          if (!own) { scheduleScan(records[i].target); }
         }
       }).observe(doc, {childList: true, subtree: true, attributes: true, attributeFilter: ['src','style','class']});
     }
     var bar = null, buttons = [], previousFocus = null, message = null;
     var hiddenOverlays = [], autoOverlay = true, cinema = null, cursorSpeed = 500;
+    var view = 'main', lastAction = {}, idleTimer = null, learned = [];
+    function readJSON(key, fallback) { try { return JSON.parse(win.localStorage.getItem(key) || 'null') || fallback; } catch(e) { return fallback; } }
+    function writeJSON(key, value) { try { win.localStorage.setItem(key, JSON.stringify(value)); return true; } catch(e) { tell('Memoria non disponibile.'); return false; } }
+    var speedSaved = readJSON('saturn-speed', 500); if ([350,500,700].indexOf(speedSaved)!==-1) cursorSpeed=speedSaved;
+    learned=readJSON('saturn-overlay-rules',[]); if (!Array.isArray(learned)) learned=[];
+    function safePage(saved) {
+      try { var u=new win.URL(saved.url); return u.protocol==='https:' && u.hostname==='animesaturn.at' && !u.username && !u.password; } catch(e) {return false;}
+    }
+    function overlaySignature(el) {
+      var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');
+      var src=''; if(frames.length) try {var u=new win.URL(frames[0].getAttribute('src'),win.location.href); src=u.origin+u.pathname;} catch(e) {}
+      var id=el.id || '', cls=String(el.getAttribute('class')||'').trim();
+      return (id || cls || src) ? el.tagName+'|'+id+'|'+cls+'|'+src : '';
+    }
+    function recognizedAd(el) {
+      var sig=overlaySignature(el); if(sig && learned.indexOf(sig)!==-1) return true;
+      var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');
+      for(var i=0;i<frames.length;i++) if(blocked(frames[i].getAttribute('src')||'')) return true;
+      return false;
+    }
     try { autoOverlay = win.sessionStorage.getItem('saturn-auto-overlay') !== '0'; } catch (e) {}
     function overlayCandidate(el) {
       if (!el || el === doc.body || el === doc.documentElement || !win.getComputedStyle || !el.getBoundingClientRect) return false;
@@ -167,13 +193,14 @@
       if (el.tagName === 'IFRAME' && /\/embed\/|turnstile|recaptcha/i.test(el.getAttribute('src') || '')) return false;
       return true;
     }
-    function hideOverlay(automatic) {
+    function hideOverlay(automatic, root) {
       if (!doc.querySelectorAll || !win.getComputedStyle) { tell('Rimozione non disponibile.'); return; }
-      var nodes = doc.querySelectorAll('div,section,aside,iframe,dialog'), best = null, score = -1;
+      var scope=root || doc, nodes=Array.prototype.slice.call(scope.querySelectorAll('div,section,aside,iframe,dialog')), best=null, score=-1;
+      if(root && root.tagName)nodes.unshift(root);
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
         if (!overlayCandidate(el)) continue;
-        if (automatic && el.querySelector && el.querySelector('form,[role=dialog]')) continue;
+        if (automatic && (!recognizedAd(el) || el.getAttribute('role')==='dialog' || el.tagName==='DIALOG' || (el.querySelector && el.querySelector('form,[role=dialog]')))) continue;
         var inside = el, own = false;
         while (inside && inside !== doc.body) { if (/^saturn-/.test(inside.id || '')) own = true; inside = inside.parentNode; }
         if (own) continue;
@@ -181,17 +208,19 @@
         if (z > score) { best = el; score = z; }
       }
       if (!best) { if (!automatic) tell('Nessun overlay separabile dal player trovato.'); return false; }
+      if (!automatic) { var sig=overlaySignature(best); if(sig && learned.indexOf(sig)===-1) { learned.push(sig); learned=learned.slice(-30); writeJSON('saturn-overlay-rules',learned); } }
       hiddenOverlays.push({element:best, style:best.getAttribute('style')});
       best.style.setProperty('display', 'none', 'important');
-      api.popups++;
+      api.popups++;refreshLabels();
       if (!automatic) tell('Riquadro nascosto. Se era utile, scegli Annulla rimozione.');
       return true;
     }
     function undoOverlay() {
-      autoOverlay = false;
-      try { win.sessionStorage.setItem('saturn-auto-overlay', '0'); } catch (e) {}
       var item = hiddenOverlays.pop();
       if (!item) { tell('Nessuna rimozione da annullare.'); return; }
+      autoOverlay = false;
+      try { win.sessionStorage.setItem('saturn-auto-overlay','0'); } catch(e) {}
+      var rule=overlaySignature(item.element), at=learned.indexOf(rule); if(at!==-1) { learned.splice(at,1); writeJSON('saturn-overlay-rules',learned); }
       if (item.style === null) item.element.removeAttribute('style'); else item.element.setAttribute('style',item.style);
       refreshLabels();
       tell('Riquadro ripristinato. Rimozione automatica disattivata per questa sessione.');
@@ -215,6 +244,7 @@
     }
     function exitCinema() {
       if (!cinema) return;
+      if(cinema.controls && cinema.controls.parentNode)cinema.controls.parentNode.removeChild(cinema.controls);
       if (cinema.style === null) cinema.el.removeAttribute('style'); else cinema.el.setAttribute('style',cinema.style);
       cinema = null; ensurePointer();
     }
@@ -237,6 +267,12 @@
         best.style.setProperty('position','fixed','important');
         var values = {top:'0',left:'0',width:'100vw',height:'100vh',maxWidth:'none',maxHeight:'none',zIndex:'2147483644',background:'#000',border:'0'};
         for (var key in values) best.style.setProperty(key.replace(/[A-Z]/g,function(c){return '-'+c.toLowerCase();}),values[key],'important');
+        var controls=doc.createElement('section');controls.id='saturn-cinema-controls';
+        controls.style.cssText='position:fixed;bottom:18px;left:18px;z-index:2147483645;background:#101820;padding:10px;color:white;font:22px sans-serif';
+        var video=null;try{video=best.tagName==='VIDEO'?best:best.contentDocument?best.contentDocument.querySelector('video'):best.querySelector('video');}catch(e){}
+        if(video){var play=doc.createElement('button');play.textContent='Play / Pausa';play.style.cssText='font:inherit;padding:12px';play.addEventListener('click',function(){if(video.paused){var p=video.play();if(p&&p.catch)p.catch(function(){});}else video.pause();});controls.appendChild(play);}
+        var leave=doc.createElement('button');leave.textContent='Esci da schermo intero';leave.style.cssText='font:inherit;padding:12px;margin-left:10px';leave.addEventListener('click',exitCinema);controls.appendChild(leave);
+        doc.body.appendChild(controls);cinema.controls=controls;
         ensurePointer();
       }
       try {
@@ -270,13 +306,14 @@
       for (var i = 0; i < buttons.length; i++) {
         var action = buttons[i].getAttribute('data-saturn-action');
         if (action === 'autoOverlay') buttons[i].textContent = 'Overlay automatici: ' + (autoOverlay ? 'ON' : 'OFF');
+        if(action==='undoOverlay')buttons[i].disabled=!hiddenOverlays.length;
         if (action === 'speed') buttons[i].textContent = 'Cursore: ' + (cursorSpeed === 350 ? 'lento' : cursorSpeed === 500 ? 'medio' : 'veloce');
       }
     }
     api.actions = {
       blackClover50: function () { win.location.assign('https://animesaturn.at/watch/black-clover-jgswge/ep-50'); },
       fullscreen: function () { fullscreen(); },
-      speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; refreshLabels(); },
+      speed: function () { cursorSpeed = cursorSpeed === 350 ? 500 : cursorSpeed === 500 ? 700 : 350; writeJSON('saturn-speed',cursorSpeed); refreshLabels(); },
       autoOverlay: function () {
         autoOverlay = !autoOverlay;
         try { win.sessionStorage.setItem('saturn-auto-overlay', autoOverlay ? '1' : '0'); } catch(e) {}
@@ -299,17 +336,63 @@
           }
           win.localStorage.setItem(bookmarkKey, JSON.stringify({url: url.href, title: doc.title || 'Episodio salvato'}));
           tell('Pagina salvata. «Riapri salvato» ti riporta qui, senza memorizzare il minuto del video.');
-          if (buttons[5]) buttons[5].disabled = false;
+          refreshLabels();
         } catch (e) { tell('Salvataggio non disponibile: la memoria del browser non è accessibile.'); }
       },
       resume: function () {
-        var saved = safeBookmark();
+        var saved=readJSON('saturn-last',null); if(!saved || !safePage(saved)) saved=safeBookmark();
         if (saved) win.location.assign(saved.url);
         else tell('Nessuna pagina salvata. Apri un episodio e scegli «Salva pagina».');
       }
     };
+    function episodeLinks() {
+      var match=new win.URL(win.location.href).pathname.match(/^\/watch\/([^/]+)\/ep-(\d+)/);
+      var result={previous:null,next:null}; if(!match) return result;
+      var links=doc.querySelectorAll('a[href]'), current=Number(match[2]), lower=-1, higher=Infinity;
+      for(var i=0;i<links.length;i++) try {
+        var u=new win.URL(links[i].getAttribute('href'),win.location.href), m=u.pathname.match(/^\/watch\/([^/]+)\/ep-(\d+)/);
+        if(!m || m[1]!==match[1] || !allowedNavigation(u.href)) continue;
+        var n=Number(m[2]); if(n<current && n>lower){lower=n;result.previous=u.href;} if(n>current&&n<higher){higher=n;result.next=u.href;}
+      } catch(e) {}
+      return result;
+    }
+    api.actions.previousEpisode=function(){var u=episodeLinks().previous;if(u)win.location.assign(u);};
+    api.actions.nextEpisode=function(){var u=episodeLinks().next;if(u)win.location.assign(u);};
+    api.actions.search=function(){
+      var input=doc.querySelector && doc.querySelector('input[type=search],input[name=keyword]');
+      if(!input){tell('Ricerca non presente: apri Home.');return;} hideBar(); input.focus(); if(input.scrollIntoView)input.scrollIntoView({block:'center'});
+    };
+    api.actions.settings=function(){switchView('settings');};
+    api.actions.main=function(){switchView('main');};
+    api.actions.favorites=function(){switchView('favorites');};
+    api.actions.addFavorite=function(){
+      var entry={url:win.location.href,title:doc.title||'Puntata'}; if(!safePage(entry))return;
+      var list=readJSON('saturn-favorites',[]); if(!Array.isArray(list))list=[];
+      list=list.filter(function(x){return x.url!==entry.url;}); list.unshift(entry);writeJSON('saturn-favorites',list.slice(0,12));switchView('favorites');
+    };
+    api.actions.info=function(){tell('Versione attiva '+api.version+'. Se diversa da GitHub, il caricatore usa ancora una copia in cache. Ricaricare la pagina non garantisce un aggiornamento.');};
+    function switchView(next){hideBar();view=next;status();}
+    function bindProgress(root){
+      if(!doc.querySelectorAll)return;
+      var scope=root&&root.querySelectorAll?root:doc,videos=Array.prototype.slice.call(scope.querySelectorAll('video'));if(scope.tagName==='VIDEO')videos.unshift(scope);
+      for(var i=0;i<videos.length;i++)(function(video){
+        if(video.__saturnProgress)return;video.__saturnProgress=true;
+        var page;try{page=win.top.location.href;}catch(e){return;}
+        if(!/\/watch\//.test(page))return;
+        var previous=readJSON('saturn-progress',{}), saved=previous[page];
+        function restore(){if(saved && saved>5 && isFinite(video.duration) && saved<video.duration-15)try{video.currentTime=saved;}catch(e){}}
+        if(video.readyState>=1)restore();else video.addEventListener('loadedmetadata',restore);
+        var last=0;video.addEventListener('timeupdate',function(){var now=Date.now();if(now-last<5000)return;last=now;
+          var data=readJSON('saturn-progress',{});if(typeof data!=='object'||Array.isArray(data))data={};data[page]=Math.floor(video.currentTime||0);
+          var keys=Object.keys(data);while(keys.length>30)delete data[keys.shift()];writeJSON('saturn-progress',data);
+        });
+      })(videos[i]);
+    }
+    function rememberPage(){if(win!==win.top || !/\/watch\//.test(win.location.href))return;writeJSON('saturn-last',{url:win.location.href,title:doc.title||'Ultima puntata'});}
+    rememberPage();bindProgress();doc.addEventListener('DOMContentLoaded',rememberPage);
     function hideBar() {
       if (!bar) return;
+      if(doc.activeElement && doc.activeElement.getAttribute) lastAction[view]=doc.activeElement.getAttribute('data-saturn-action');
       bar.parentNode.removeChild(bar); bar = null; buttons = []; message = null;
       ensurePointer();
       try { if (previousFocus && previousFocus.focus) previousFocus.focus(); } catch (e) {}
@@ -324,17 +407,29 @@
       bar.id = 'saturn-toolbar'; bar.setAttribute('aria-label', 'Comandi Saturn TV');
       bar.style.cssText = 'position:fixed;top:3vh;left:3vw;right:3vw;z-index:2147483647;background:#101820;color:#f4f7fa;padding:24px;box-shadow:0 12px 32px #0008;font:22px/1.4 sans-serif;text-align:left;max-height:88vh;overflow:auto;box-sizing:border-box';
       var style = doc.createElement('style');
-      style.textContent = '#saturn-toolbar button{font:inherit;line-height:1.3;min-height:58px;padding:12px 18px;margin:6px 10px 6px 0;border:2px solid #72899c;border-radius:6px;background:#1d3040;color:#f4f7fa;cursor:pointer}#saturn-toolbar button:focus,#saturn-toolbar button:hover{outline:4px solid #8cdeff;outline-offset:2px;background:#294b62}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575;cursor:default}#saturn-toolbar p{margin:8px 0 12px;font:inherit;color:#c6d9e8}';
+      style.textContent = '#saturn-toolbar button{font:inherit;line-height:1.3;min-height:58px;max-width:100%;box-sizing:border-box;overflow-wrap:break-word;padding:12px 18px;margin:6px 10px 6px 0;border:2px solid #72899c;border-radius:6px;background:#1d3040;color:#f4f7fa;cursor:pointer}#saturn-toolbar button:focus,#saturn-toolbar button:hover{outline:4px solid #8cdeff;outline-offset:2px;background:#294b62}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575;cursor:default}#saturn-toolbar p{margin:8px 0 12px;font:inherit;color:#c6d9e8}';
       bar.appendChild(style);
-      var title = doc.createElement('strong'); title.textContent = 'Saturn TV ' + api.version; bar.appendChild(title);
+      var title = doc.createElement('strong'); title.textContent = view==='settings' ? 'Impostazioni · '+api.version : view==='favorites' ? 'Preferiti' : 'Saturn TV'; bar.appendChild(title);
       var stats = doc.createElement('p');
-      stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
+      stats.textContent=view==='settings'?'Filtro '+(api.enabled?'ON':'OFF')+' · Bloccati: '+api.popups+' finestre, '+api.resources+' risorse':'Frecce per scegliere · OK per aprire · Indietro per chiudere';
       bar.appendChild(stats);
-      var specs = [['Indietro', 'back'], ['Avanti', 'forward'], ['Aggiorna', 'reload'], ['Home', 'home'], ['Salva pagina', 'save'], ['Riapri salvato', 'resume'], [api.enabled ? 'Disattiva filtro' : 'Attiva filtro', 'filter'], ['Nascondi overlay', 'overlay'], ['Annulla rimozione', 'undoOverlay'], ['Schermo intero', 'fullscreen'], ['Overlay automatici ON/OFF', 'autoOverlay'], ['Velocità cursore', 'speed'], ['Black Clover · episodio 50', 'blackClover50'], ['Chiudi barra', 'close']];
+      var specs;
+      if(view==='main') specs=[['Riprendi','resume'],['Cerca','search'],['Puntata precedente','previousEpisode'],['Puntata successiva','nextEpisode'],['Schermo intero','fullscreen'],['Preferiti','favorites'],['Black Clover · episodio 50','blackClover50'],['Impostazioni','settings'],['Chiudi','close']];
+      else if(view==='settings') specs=[['Menu principale','main'],['Pagina precedente','back'],['Pagina successiva','forward'],['Home','home'],['Aggiorna pagina','reload'],[api.enabled?'Disattiva filtro':'Attiva filtro','filter'],['Nascondi overlay e ricordalo','overlay'],['Annulla rimozione','undoOverlay'],['Overlay automatici','autoOverlay'],['Velocità cursore','speed'],['Versione e aggiornamenti','info'],['Salva collegamento','save']];
+      else {
+        specs=[['Menu principale','main'],['Aggiungi questa pagina','addFavorite']];
+        var favorites=readJSON('saturn-favorites',[]); if(!Array.isArray(favorites)) favorites=[];
+        favorites.filter(safePage).forEach(function(f,index){var action='favorite'+index;api.actions[action]=function(){win.location.assign(f.url);};specs.push([f.title||f.url,action]);});
+      }
+      var neighbors=episodeLinks(), latest=readJSON('saturn-last',null);
+
       for (var i = 0; i < specs.length; i++) {
         var btn = doc.createElement('button'); btn.type = 'button'; btn.textContent = specs[i][0];
         btn.setAttribute('data-saturn-action', specs[i][1]);
-        if (specs[i][1] === 'resume') btn.disabled = !safeBookmark();
+        if(specs[i][1]==='resume')btn.disabled=!(latest&&safePage(latest))&&!safeBookmark();
+        if(specs[i][1]==='previousEpisode')btn.disabled=!neighbors.previous;
+        if(specs[i][1]==='nextEpisode')btn.disabled=!neighbors.next;
+        if(specs[i][1]==='undoOverlay')btn.disabled=!hiddenOverlays.length;
         btn.addEventListener('click', function (event) {
           event.preventDefault(); event.stopPropagation();
           var action = this.getAttribute('data-saturn-action');
@@ -343,8 +438,8 @@
         buttons.push(btn); bar.appendChild(btn);
       }
       message = doc.createElement('p'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
-      message.textContent = 'Frecce: scegli · OK: esegui · Indietro o Blu: chiudi. Aggiorna e cambio filtro ricaricano la pagina: il minuto del video può andare perso.';
-      bar.appendChild(message); doc.body.appendChild(bar); buttons[0].focus(); refreshLabels(); ensurePointer();
+      message.textContent = view==='settings' ? 'Indietro torna al menu. Aggiorna e cambio filtro ricaricano la pagina.' : view==='favorites' ? 'Salva più collegamenti. Indietro torna al menu.' : 'Riprendi apre l’ultima puntata. I comandi puntata si attivano quando il sito espone i collegamenti.';
+      bar.appendChild(message); doc.body.appendChild(bar); var focus=buttons.filter(function(b){return !b.disabled && b.getAttribute('data-saturn-action')===lastAction[view];})[0] || buttons.filter(function(b){return !b.disabled;})[0];if(focus)focus.focus(); refreshLabels(); ensurePointer();
     }
     api.status = status;
     api.isBlocked = blocked;
@@ -354,20 +449,24 @@
       if (!pointer) {
         cursorX = Math.round(win.innerWidth / 2); cursorY = Math.round(win.innerHeight / 2);
         pointer = doc.createElement('div'); pointer.id = 'saturn-pointer';
-        pointer.textContent = '➤'; pointer.setAttribute('aria-hidden', 'true');
+        pointer.innerHTML = '<svg width=28 height=34 viewBox="0 0 28 34" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M2 2V28L9 21L15 32L21 29L15 18H26Z" fill="white" stroke="#101820" stroke-width="2"/></svg>'; pointer.setAttribute('aria-hidden', 'true');
         pointer.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;color:#fff;font:36px sans-serif;text-shadow:0 0 4px #000,2px 2px 2px #000;transform:rotate(-35deg);line-height:1';
         doc.body.appendChild(pointer);
         menuButton = doc.createElement('button'); menuButton.type = 'button';
-        menuButton.id = 'saturn-menu'; menuButton.textContent = '☰ Menu · ' + api.version;
+        menuButton.id = 'saturn-menu'; menuButton.textContent = 'Menu';
         menuButton.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:2147483645;padding:12px 18px;background:#101820;color:white;border:2px solid #8cdeff;border-radius:8px;font:20px sans-serif';
         menuButton.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); status(); });
         doc.body.appendChild(menuButton);
       }
-      pointer.style.left = cursorX + 'px'; pointer.style.top = cursorY + 'px';
-      var hidden = bar || cinema || doc.fullscreenElement || doc.webkitFullscreenElement;
+      pointer.style.left='0'; pointer.style.top='0'; pointer.style.transform='translate3d('+cursorX+'px,'+cursorY+'px,0) rotate(-35deg)';
+      var hidden = bar || doc.fullscreenElement || doc.webkitFullscreenElement;
       pointer.style.display = hidden ? 'none' : 'block';
       if (menuButton) menuButton.style.display = hidden ? 'none' : 'block';
       return true;
+    }
+    function wakePointer(){
+      ensurePointer(); if(idleTimer && win.clearTimeout)win.clearTimeout(idleTimer);
+      idleTimer=win.setTimeout(function(){if(pointer&&!bar)pointer.style.display='none';},3500);
     }
     function pointerKey(code) {
       if (!ensurePointer()) return;
@@ -386,7 +485,7 @@
           while (link && link !== doc && link.tagName !== 'A') link = link.parentNode;
           if (link && link.tagName === 'A' && link.getAttribute('href')) {
             var href = link.getAttribute('href');
-            if (allowedNavigation(href)) win.location.assign(new win.URL(href, win.location.href).href);
+            if (allowedNavigation(href) || (!api.enabled && /^https?:/.test(new win.URL(href,win.location.href).protocol))) win.location.assign(new win.URL(href, win.location.href).href);
             else api.popups++;
             return;
           }
@@ -403,7 +502,7 @@
       if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
       cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
       cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
-      ensurePointer();
+      wakePointer();
       if (doc.elementFromPoint && win.MouseEvent) {
         try {
           var hover = doc.elementFromPoint(cursorX,cursorY), x = cursorX, y = cursorY;
@@ -466,21 +565,26 @@
         return;
       }
       if (!bar && !editing && !doc.fullscreenElement && !doc.webkitFullscreenElement && [37,38,39,40,13].indexOf(code) !== -1 && doc.elementFromPoint) {
-        event.preventDefault(); event.stopImmediatePropagation(); pointerKey(code); return;
+        event.preventDefault(); event.stopImmediatePropagation(); wakePointer();pointerKey(code); return;
       }
       if (code === 405 || code === 406 || code === 10009 || (bar && [37, 38, 39, 40, 13, 27, 10009].indexOf(code) !== -1)) {
         event.preventDefault(); event.stopImmediatePropagation();
         if (event.repeat) return;
         if (code === 405) toggleFilter();
+        else if (code===10009 && bar && view!=='main'){switchView('main');}
         else if (code === 406 || code === 10009) { status(); ensurePointer(); }
         else if (code === 27) hideBar();
         else if (code === 13) { if (doc.activeElement && buttons.indexOf(doc.activeElement) !== -1) doc.activeElement.click(); }
         else {
-          var pos = buttons.indexOf(doc.activeElement), step = (code === 37 || code === 38) ? -1 : 1;
-          for (var n = 0; n < buttons.length; n++) {
-            pos = (pos + step + buttons.length) % buttons.length;
-            if (!buttons[pos].disabled) { buttons[pos].focus(); break; }
-          }
+          var current=doc.activeElement, selected=null, cost=Infinity;
+          if(current && current.getBoundingClientRect){
+            var box=current.getBoundingClientRect(), cx=box.left+box.width/2, cy=box.top+box.height/2;
+            for(var j=0;j<buttons.length;j++){var b=buttons[j];if(b.disabled||b===current)continue;var r=b.getBoundingClientRect(),dx=r.left+r.width/2-cx,dy=r.top+r.height/2-cy;
+              var along=code===37?-dx:code===39?dx:code===38?-dy:dy, across=(code===37||code===39)?Math.abs(dy):Math.abs(dx);
+              if(along>5 && along+across*3<cost){selected=b;cost=along+across*3;}
+            }
+          } else {var pos=buttons.indexOf(current),step=(code===37||code===38)?-1:1;for(var n=0;n<buttons.length;n++){pos=(pos+step+buttons.length)%buttons.length;if(!buttons[pos].disabled){selected=buttons[pos];break;}}}
+          if(selected){selected.focus();if(selected.scrollIntoView)selected.scrollIntoView({block:'nearest'});}
         }
       }
     }
