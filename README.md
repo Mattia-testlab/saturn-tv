@@ -1,4 +1,4 @@
-# Saturn TV 0.5.0
+# Saturn TV 0.6.0
 
 Modulo sperimentale TizenBrew per AnimeSaturn, destinato a Samsung UE50AU9070UXZT.
 Il modulo non equivale a un browser completo o a uBlock Origin.
@@ -26,7 +26,7 @@ forzato. Il riavvio della pagina non svuota necessariamente la cache del servizi
   Preferiti, Black Clover episodio 50, Impostazioni, Chiudi.
 - Le puntate adiacenti si ricavano dai link realmente presenti per la serie corrente;
   senza link il relativo comando è disabilitato. Non vengono inventati URL.
-- Riprendi conserva automaticamente l'ultima pagina /watch/. Se il video è accessibile,
+- Riprendi conserva automaticamente l'ultima pagina /anime/.../ep-.... Se il video è accessibile,
   registra il secondo ogni 5 secondi e lo ripristina dopo il caricamento dei metadati.
   Non riprende a meno di 15 secondi dalla fine. Player esterni possono impedire il salvataggio.
 - Preferiti conserva fino a 12 collegamenti; l'aggiunta di un tredicesimo sostituisce
@@ -78,9 +78,34 @@ python3 -m http.server 8766 --bind 127.0.0.1 --directory test/.browser
 Aprire http://127.0.0.1:8766/ nel browser. La fixture modifica SOLO la propria copia
 del controllo dominio per consentire localhost; il modulo distribuito non lo accetta.
 La fixture contiene simulazioni DOM, non video streaming o pubblicità reali.
-24 test Node e 22 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
+27 test Node e 22 verifiche browser eseguite localmente. Firmware, tastiera Samsung,
 player reale e pubblicità reale non sono sostituiti da questi test.
 
-`saturn.js` è la sorgente; `saturn-0.5.0.js` è la copia identica distribuita.
+`saturn.js` è la sorgente; `saturn-0.6.0.js` è la copia identica distribuita.
 I file versionati precedenti restano per i tag già pubblicati.
 Riferimenti: https://github.com/reisxd/TizenBrew e https://github.com/uBlockOrigin/uAssets
+
+
+## Migrazione al dominio ufficiale (.net)
+
+La versione 0.6.0 apre https://www.animesaturn.net/, indicato da
+https://www.animesaturn.me/ nella lista dei domini. Il vecchio .at è escluso.
+Black Clover 50: https://www.animesaturn.net/anime/black-clover-67Dip/ep-50
+
+Verifiche sul sito reale nel browser Mac: ricerca Black Clover, pagina serie,
+episodio 50, avvio video e avanzamento oltre 80 secondi senza errore. La durata
+rilevata era circa 1430 secondi. Questo verifica la disponibilità del contenuto
+sul Mac, non la riproduzione sul firmware della TV né il filtraggio del modulo reale.
+
+Il player osservato è un iframe #watch-iframe su https://play.saturncdn.net/embed/176.
+Il modulo accetta solo il sito .net (con/senza www) e quel dominio player esatto.
+Il bridge postMessage per clic/tasti/fullscreen verifica origine e finestra sorgente;
+non consente messaggi da iframe pubblicitari o altri siti. Richiede che TizenBrew
+inietti il modulo anche nel contesto del player: da confermare sulla Samsung.
+
+Ricerca: /filter?key=Black+Clover. I link /episode/... sono pagine intermedie;
+la riproduzione diretta è /anime/.../ep-50. Sono stati adattati ricerca, Home,
+segnalibri, puntate adiacenti, ripresa, fullscreen e il pulsante Black Clover.
+
+Preferiti e progressi salvati su .at non sono trasferiti: l'origine e gli
+identificativi sono diversi. Non vengono cancellati o convertiti in URL inventati.
