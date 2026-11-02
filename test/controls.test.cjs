@@ -79,3 +79,16 @@ test('cursor moves with arrows, clicks the hit element and scrolls at vertical e
   f.key(10009);
   assert.ok(f.doc.body.children.some(n => n.id === 'saturn-toolbar'));
 });
+test('confirming search preserves submit and releases focus before moving cursor again', () => {
+  const f = fixture(); const pending = []; let hit, blurred = false;
+  f.win.setTimeout = fn => pending.push(fn);
+  f.win.innerWidth = 1280; f.win.innerHeight = 720;
+  f.doc.elementFromPoint = (x,y) => {hit=[x,y]; return null;};
+  const input = {tagName:'INPUT', blur() {blurred=true; f.doc.activeElement=null;}};
+  f.doc.activeElement=input;
+  f.key(13);
+  assert.equal(blurred,false); // Browser default submission runs first.
+  pending.forEach(fn=>fn());
+  assert.equal(blurred,true);
+  f.key(39); f.key(13); assert.deepEqual(hit,[668,360]);
+});

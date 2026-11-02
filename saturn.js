@@ -1,4 +1,4 @@
-/* Saturn TV 0.2.3 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.2.4 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.3'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.4'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -241,8 +241,22 @@
       // Let the player and on-screen keyboard handle Back in their own contexts.
       var target = event.target || doc.activeElement;
       if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
-          (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)))) return;
+          (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)))) {
+        if (target && target.tagName === 'INPUT') win.setTimeout(function () {
+          if (doc.activeElement === target && target.blur) target.blur();
+        }, 0);
+        return;
+      }
       var editing = target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable);
+      // Preserve the site's Enter/default submit, then release the text field.
+      // Do not run for the Enter that initially clicks into a field.
+      if (!bar && editing && code === 13 && target.tagName === 'INPUT') {
+        win.setTimeout(function () {
+          if (doc.activeElement === target && target.blur) target.blur();
+          ensurePointer();
+        }, 0);
+        return;
+      }
       if (!bar && !editing && !doc.fullscreenElement && !doc.webkitFullscreenElement && [37,38,39,40,13].indexOf(code) !== -1 && doc.elementFromPoint) {
         event.preventDefault(); event.stopImmediatePropagation(); pointerKey(code); return;
       }

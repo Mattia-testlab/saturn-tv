@@ -68,3 +68,9 @@ Cursore simulato: frecce per muoverlo, OK per cliccare, scorrimento ai bordi ver
 I clic sintetici non equivalgono a un mouse fisico e possono essere rifiutati dai player.
 I riquadri di altri domini non sono controllabili. In pieno schermo e nei campi di testo
 i tasti restano al sito. La barra mostra la versione effettivamente in esecuzione.
+
+## Versione 0.2.4
+
+Dopo Invio/OK in un campo input, rilascia il focus al termine dell’evento per
+ripristinare il cursore senza annullare l’invio del modulo. Indietro nel campo
+lascia chiudere la tastiera e rilascia il focus. Da verificare sulla tastiera fisica della TV.
