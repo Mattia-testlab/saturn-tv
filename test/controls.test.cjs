@@ -67,3 +67,15 @@ test('Back opens and closes toolbar without navigating, but respects fullscreen 
   f.key(415); f.key(19); f.key(10252);
   assert.equal(f.doc.body.children.length, 0);
 });
+test('cursor moves with arrows, clicks the hit element and scrolls at vertical edges', () => {
+  const f = fixture(); let point, clicked = 0, scrolled = 0;
+  f.win.innerWidth = 1280; f.win.innerHeight = 720;
+  f.win.scrollBy = (x,y) => { scrolled += y; };
+  f.doc.elementFromPoint = (x,y) => { point = [x,y]; return {focus() {}, click() { clicked++; }}; };
+  f.key(39); f.key(13);
+  assert.deepEqual(point, [668,360]); assert.equal(clicked,1);
+  for (let i=0;i<20;i++) f.key(40);
+  assert.ok(scrolled > 0);
+  f.key(10009);
+  assert.ok(f.doc.body.children.some(n => n.id === 'saturn-toolbar'));
+});

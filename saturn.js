@@ -1,4 +1,4 @@
-/* Saturn TV 0.2.2 — no external dependencies; experimental TizenBrew module. */
+/* Saturn TV 0.2.3 — no external dependencies; experimental TizenBrew module. */
 (function (root) {
   'use strict';
   var blockedHosts = [
@@ -21,7 +21,7 @@
       if (host !== 'animesaturn.at' && !/\.animesaturn\.at$/.test(host)) return null;
     } catch (e) { return null; }
     var doc = win.document;
-    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.2'};
+    var api = {enabled: true, popups: 0, resources: 0, version: '0.2.3'};
     win.__saturnTV = api;
     try { api.enabled = win.sessionStorage.getItem('saturn-disabled') !== '1'; } catch (e) {}
     function blocked(url) {
@@ -173,7 +173,7 @@
       var style = doc.createElement('style');
       style.textContent = '#saturn-toolbar button{font:inherit;line-height:1.3;min-height:58px;padding:12px 18px;margin:6px 10px 6px 0;border:2px solid #72899c;border-radius:6px;background:#1d3040;color:#f4f7fa;cursor:pointer}#saturn-toolbar button:focus,#saturn-toolbar button:hover{outline:4px solid #8cdeff;outline-offset:2px;background:#294b62}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575;cursor:default}#saturn-toolbar p{margin:8px 0 12px;font:inherit;color:#c6d9e8}';
       bar.appendChild(style);
-      var title = doc.createElement('strong'); title.textContent = 'Saturn TV'; bar.appendChild(title);
+      var title = doc.createElement('strong'); title.textContent = 'Saturn TV ' + api.version; bar.appendChild(title);
       var stats = doc.createElement('p');
       stats.textContent = 'Filtro ' + (api.enabled ? 'attivo' : 'spento') + ' · Finestre bloccate: ' + api.popups + ' · Risorse bloccate: ' + api.resources;
       bar.appendChild(stats);
@@ -195,18 +195,62 @@
     }
     api.status = status;
     api.isBlocked = blocked;
-    doc.addEventListener('keydown', function (event) {
+    var pointer = null, cursorX = 0, cursorY = 0;
+    function ensurePointer() {
+      if (win !== win.top || !doc.body || !doc.elementFromPoint || !win.innerWidth) return false;
+      if (!pointer) {
+        cursorX = Math.round(win.innerWidth / 2); cursorY = Math.round(win.innerHeight / 2);
+        pointer = doc.createElement('div'); pointer.id = 'saturn-pointer';
+        pointer.textContent = '➤'; pointer.setAttribute('aria-hidden', 'true');
+        pointer.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;color:#fff;font:36px sans-serif;text-shadow:0 0 4px #000,2px 2px 2px #000;transform:rotate(-35deg);line-height:1';
+        doc.body.appendChild(pointer);
+      }
+      pointer.style.left = cursorX + 'px'; pointer.style.top = cursorY + 'px';
+      pointer.style.display = bar ? 'none' : 'block';
+      return true;
+    }
+    function pointerKey(code) {
+      if (!ensurePointer()) return;
+      if (code === 13) {
+        var el = doc.elementFromPoint(cursorX, cursorY);
+        if (el && el.tagName === 'IFRAME') {
+          // Same-origin frames only. Foreign players need their own native controls.
+          try {
+            var rect = el.getBoundingClientRect();
+            el = el.contentDocument.elementFromPoint(cursorX - rect.left, cursorY - rect.top);
+          } catch (e) { return; }
+        }
+        if (el) { if (el.focus) el.focus(); if (el.click) el.click(); }
+      } else {
+        var dx = code === 37 ? -28 : code === 39 ? 28 : 0;
+        var dy = code === 38 ? -28 : code === 40 ? 28 : 0;
+        var nextY = cursorY + dy;
+        if (nextY < 20 || nextY > win.innerHeight - 45) win.scrollBy(0, dy * 4);
+        cursorX = Math.max(4, Math.min(win.innerWidth - 40, cursorX + dx));
+        cursorY = Math.max(20, Math.min(win.innerHeight - 45, nextY));
+        ensurePointer();
+      }
+    }
+    ensurePointer();
+    doc.addEventListener('DOMContentLoaded', ensurePointer);
+    // Window capture runs before site handlers attached to document.
+    var keyTarget = win.addEventListener ? win : doc;
+    keyTarget.addEventListener('keydown', function (event) {
       if (win !== win.top) return;
       var code = event.keyCode;
       // Let the player and on-screen keyboard handle Back in their own contexts.
       var target = event.target || doc.activeElement;
       if (code === 10009 && !bar && (doc.fullscreenElement || doc.webkitFullscreenElement ||
           (target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable)))) return;
+      var editing = target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable);
+      if (!bar && !editing && !doc.fullscreenElement && !doc.webkitFullscreenElement && [37,38,39,40,13].indexOf(code) !== -1 && doc.elementFromPoint) {
+        event.preventDefault(); event.stopImmediatePropagation(); pointerKey(code); return;
+      }
       if (code === 405 || code === 406 || code === 10009 || (bar && [37, 38, 39, 40, 13, 27, 10009].indexOf(code) !== -1)) {
         event.preventDefault(); event.stopImmediatePropagation();
         if (event.repeat) return;
         if (code === 405) toggleFilter();
-        else if (code === 406 || code === 10009) status();
+        else if (code === 406 || code === 10009) { status(); ensurePointer(); }
         else if (code === 27) hideBar();
         else if (code === 13) { if (doc.activeElement && buttons.indexOf(doc.activeElement) !== -1) doc.activeElement.click(); }
         else {

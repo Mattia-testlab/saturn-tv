@@ -61,3 +61,10 @@ Riferimento formato moduli: https://github.com/reisxd/TizenBrew/blob/main/docs/M
 
 Questo è il primo filtro sperimentale. Non promette eliminazione di ogni pubblicità
 e non modifica il browser Samsung, il firmware o le altre app del televisore.
+
+## Versione 0.2.3
+
+Cursore simulato: frecce per muoverlo, OK per cliccare, scorrimento ai bordi verticali.
+I clic sintetici non equivalgono a un mouse fisico e possono essere rifiutati dai player.
+I riquadri di altri domini non sono controllabili. In pieno schermo e nei campi di testo
+i tasti restano al sito. La barra mostra la versione effettivamente in esecuzione.
