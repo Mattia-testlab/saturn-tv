@@ -5,17 +5,23 @@ di usare il lettore classico di AnimeSaturn. Play, pausa, timeline, sorgente vid
 impostazioni e fullscreen sono quelli del sito. Il modulo non chiama le API JW,
 non crea video alternativi, non cambia src/controls e non aggiunge transport bar.
 
-## Installazione
+## Installazione e aggiornamenti
 
-Gestore moduli TizenBrew → Aggiungi GitHub:
+Usare sempre questa unica voce GitHub in TizenBrew:
 
-   Mattia-testlab/saturn-tv@v0.9.0
+    Mattia-testlab/saturn-tv
 
-Aprire la scheda “player del sito · 0.9.0”. Il tag usa una chiave nuova della cache;
-rimane fissato a questa release. Il canale Mattia-testlab/saturn-tv senza tag resta
-aggiornabile, ma codice e metadati possono rimanere nella cache del servizio: il
-semplice refresh della pagina non la svuota. Il Mac può rimanere spento durante
-l’uso sulla TV. Il banco locale è uno strumento di sviluppo separato.
+Se è già presente, aprire quella: non aggiungere una nuova voce per ogni release.
+Gli aggiornamenti vengono pubblicati nello stesso repository, sul ramo main.
+I suffissi @v0.x fissano una versione e non sono il canale da usare normalmente.
+
+Il servizio TizenBrew può tenere il vecchio codice in memoria. Quando una nuova
+versione non compare, tenere premuto Accensione fino al logo Samsung, quindi
+riaprire TizenBrew e la voce senza suffisso. Aggiorna pagina non svuota questa
+cache. La verifica va fatta sul numero mostrato dalla barra del modulo.
+
+Il Mac può rimanere spento durante l’uso sulla TV. Il banco locale è soltanto
+uno strumento di sviluppo separato.
 
 ## Telecomando e cursore
 
