@@ -1,43 +1,18 @@
-<!doctype html><html lang="it"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="frame-src 'self'"><title>Saturn TV 0.7.0 — collaudo</title>
-<style>body{background:#101820;color:#eef6ff;font:20px sans-serif;padding:32px}li{margin:10px}button,input{font:inherit;padding:12px}#results{max-width:78%}</style>
-<h1>Saturn TV 0.7.0 — collaudo</h1><p>Fixture locale dei comandi. Riproduzione e firmware Samsung da verificare sul dispositivo.</p>
-<input type="search" name="keyword" aria-label="Ricerca di prova"><ul id="results"></ul>
-<script>sessionStorage.setItem("saturn-auto-overlay","1");localStorage.setItem("saturn-overlay-rules","[]");</script><script src="saturn-test.js"></script><script>
-(async function(){
- let failures=0;const results=document.getElementById('results'),api=window.__saturnTV,sleep=ms=>new Promise(r=>setTimeout(r,ms));
- function check(label,ok){const li=document.createElement('li');li.textContent=(ok?'PASS — ':'FAIL — ')+label;li.style.color=ok?'#9aefb7':'#ff9a9a';results.appendChild(li);if(!ok)failures++;}
- function key(code,type='keydown'){const e=new KeyboardEvent(type,{keyCode:code,bubbles:true,cancelable:true});(document.activeElement||document).dispatchEvent(e);return e;}
- function action(name){return document.querySelector('[data-saturn-action="'+name+'"]');}
- check('Versione attiva',api.version==='0.7.0');key(10009);
- check('Barra con sei comandi',document.querySelectorAll('#saturn-toolbar button').length===6);
- check('Black Clover 50 resta nel menu rapido',!!action('blackClover50'));
- action('settings').click();check('Impostazioni separate',!!action('speed')&&!action('search'));
- action('tools').click();check('Annulla disabilitato se non necessario',action('undoOverlay').disabled);
- api.actions.settings();const noUndo=action('autoOverlay').textContent;api.actions.undoOverlay();check('Annulla vuoto non cambia automatico',action('autoOverlay').textContent===noUndo);
- api.actions.main();const before=document.activeElement.getBoundingClientRect();key(40);const after=document.activeElement.getBoundingClientRect();check('Freccia Giù segue le righe visibili',after.top>before.top);
- action('search').click();const search=document.querySelector('input');check('Cerca apre il campo direttamente',document.activeElement===search);
- check('OK non blocca invio ricerca',!key(13).defaultPrevented);await sleep(20);check('Dopo ricerca focus rilasciato',document.activeElement!==search);
- const pointer=document.getElementById('saturn-pointer');function x(){return parseFloat(pointer.style.transform.match(/translate3d\(([^p]+)/)[1]);}
- const start=x();key(39);await sleep(150);key(39,'keyup');const end=x();check('Cursore continuo',end>start+35);await sleep(60);check('Rilascio ferma movimento',Math.abs(x()-end)<1);
- const unknown=document.createElement('div');unknown.id='unknown-legit';unknown.style.cssText='position:fixed;inset:0;background:white;z-index:999999';document.body.appendChild(unknown);await sleep(300);
- check('Riquadro sconosciuto non nascosto automaticamente',getComputedStyle(unknown).display!=='none');
- api.actions.overlay();check('Rimozione manuale funziona',getComputedStyle(unknown).display==='none');unknown.remove();
- const repeated=document.createElement('div');repeated.id='unknown-legit';repeated.style.cssText='position:fixed;inset:0;background:white;z-index:999999';document.body.appendChild(repeated);await sleep(300);
- check('Riquadro riconosciuto viene nascosto automaticamente',getComputedStyle(repeated).display==='none');
- api.actions.undoOverlay();await sleep(300);check('Annulla ripristina e sospende automatico',getComputedStyle(repeated).display!=='none');repeated.remove();
- const video=document.createElement('video');video.style.cssText='display:block;width:640px;height:360px';video.requestFullscreen=()=>Promise.reject(new Error('fixture native denial'));document.body.appendChild(video);const style=video.getAttribute('style');
- api.actions.fullscreen();await sleep(30);check('Cinema allarga video',video.getBoundingClientRect().width>=innerWidth-2);
- check('Cinema mantiene puntatore e uscita visibili',pointer.style.display!=='none'&&!!document.getElementById('saturn-cinema-controls'));
- check('Cinema offre pausa e salti di dieci secondi',document.querySelectorAll('#saturn-cinema-controls button').length===4);
- const pauseButton=document.querySelector('#saturn-cinema-controls button[aria-label="Play / Pausa"]');pauseButton.focus();check('I comandi video ricevono il focus',document.activeElement===pauseButton);
- key(10009);check('Indietro ripristina video e rimuove controlli',video.getAttribute('style')===style&&!document.getElementById('saturn-cinema-controls'));video.remove();
- if(!action('settings'))api.status();action('settings').click();api.actions.speed();const speed=JSON.parse(localStorage.getItem('saturn-speed'));check('Velocità persistente',[350,500,700].includes(speed));
- api.actions.info();check('Versione e limite cache spiegati',document.querySelector('[role=status]').textContent.includes('0.7.0'));
- key(10009);check('Indietro da impostazioni torna al menu rapido',!!action('search'));key(10009);
- const frame=document.createElement('iframe');frame.id='watch-iframe';frame.src='about:blank';frame.style.cssText='width:640px;height:360px';let nativeCalls=0;frame.requestFullscreen=()=>{nativeCalls++;return Promise.resolve();};document.body.appendChild(frame);
- api.actions.fullscreen();await sleep(30);check('Player ufficiale ingrandito con Menu raggiungibile',nativeCalls===0&&getComputedStyle(frame).position==='fixed'&&document.getElementById('saturn-menu').style.display!=='none');
- check('Controlli indipendenti anche sul player iframe',document.querySelectorAll('#saturn-cinema-controls button').length===4);
- key(10009);check('Uscita dal player ufficiale riapre la barra',!!document.getElementById('saturn-toolbar')&&getComputedStyle(frame).position!=='fixed');key(10009);frame.remove();
- const summary=document.createElement('h2');summary.textContent=failures?failures+' verifiche fallite':'Tutte le verifiche browser superate';document.body.insertBefore(summary,results);
+<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV 0.9.0 · verifiche</title>
+<style>body{background:#101820;color:#eef6ff;font:20px sans-serif}li{padding:6px}button,input{font:inherit;padding:10px}</style>
+<h1>Collaudo del modulo classico</h1><input type="search" aria-label="Ricerca di prova"><ul id="results"></ul><script src="saturn-test.js"></script>
+<script>
+(async()=>{
+ const api=window.__saturnTV,results=document.getElementById('results'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ function check(text,ok){let li=document.createElement('li');li.textContent=(ok?'PASS — ':'FAIL — ')+text;results.appendChild(li);}
+ function key(code,type='keydown'){(document.activeElement||document).dispatchEvent(new KeyboardEvent(type,{keyCode:code,bubbles:true,cancelable:true}));}
+ check('Versione 0.9.0',api.version==='0.9.0');check('Nessun lettore o barra di riproduzione aggiunti',!document.querySelector('video,#saturn-cinema-controls,#saturn-native-video,#saturn-menu'));
+ key(10009);check('Indietro apre solo la navigazione',document.querySelectorAll('#saturn-toolbar button').length===6);check('Nessun Play o fullscreen nel menu',!Array.from(document.querySelectorAll('#saturn-toolbar button')).some(b=>/Play|Pausa|Schermo/i.test(b.textContent)));
+ document.querySelector('[data-saturn-action=search]').click();check('Cerca dà il focus al campo del sito',document.activeElement===document.querySelector('input'));
+ key(13);await sleep(20);check('Il campo ricerca rilascia il focus',document.activeElement!==document.querySelector('input'));
+ function x(){return Number(document.getElementById('saturn-pointer').style.transform.match(/translate3d\(([-.\d]+)/)[1]);}
+ let initial=x();key(39);key(39,'keyup');check('Tocco preciso di quattro pixel',x()===initial+4);await sleep(30);
+ initial=x();key(39);await sleep(450);key(39,'keyup');let end=x();check('Movimento continuo tenendo premuto',end>initial+35);await sleep(80);check('Rilascio senza deriva',x()===end);
+ key(10009);key(10009);check('La navigazione si richiude',!document.getElementById('saturn-toolbar'));
 })();
 </script></html>

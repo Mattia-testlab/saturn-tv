@@ -1,16 +1,11 @@
-<!doctype html><html lang="it"><meta charset="utf-8"><title>Player simulato</title>
-<style>html,body{margin:0;height:100%;background:#080c10;color:#eef6ff;font:24px sans-serif}button{position:fixed;inset:0;width:100%;font:inherit;color:inherit;background:transparent;border:0}span{position:fixed;bottom:110px;left:30px;pointer-events:none}</style>
-<button id="surface" aria-label="Player simulato">Player simulato · nessun episodio riprodotto</button><span id="state">In attesa della freccia</span>
-<div id="jw-player"></div><video hidden></video>
+<!doctype html><html lang="it"><meta charset="utf-8"><title>Controlli originali di prova</title>
+<style>body{margin:0;background:#17222d;color:white;font:22px sans-serif}#play{position:fixed;left:40%;top:45%;width:20%;height:10%;font:inherit}#seek{position:fixed;left:10%;width:80%;top:70%;height:28px;background:#8cdeff}#result{position:fixed;left:20px;top:20px}</style>
+<div id="result">Player del sito simulato</div><button id="play">Play del sito</button><div id="seek" role="slider" tabindex="0" aria-label="Timeline del sito"></div>
+<script>Object.defineProperty(window,'jwplayer',{get(){throw Error('Il modulo non deve chiamare il provider');}});</script><script src="saturn-bridge-test.js"></script>
 <script>
-// Regression model: raw video.play is forbidden; JW owns the state.
-let playerState='idle',position=0,playCalls=0;
-const video=document.querySelector('video');video.play=()=>{throw Error('Raw play bypasses JW');};
-const jw={getState:()=>playerState,getPosition:()=>position,getDuration:()=>600,getControls:()=>true,
-play(){playerState='playing';playCalls++;video.dispatchEvent(new Event('playing'));report();},pause(){playerState='paused';video.dispatchEvent(new Event('pause'));},seek(value){position=value;video.dispatchEvent(new Event('timeupdate'));}};
-window.jwplayer=()=>jw;
-</script><script src="saturn-bridge-test.js"></script><script>
-let moves=0,clicks=0;function report(){parent.postMessage({testPlayer:1,ready:!!window.__saturnTV,moves,clicks,plays:playCalls},'http://127.0.0.1:8766');}
-document.getElementById('surface').addEventListener('mousemove',()=>{moves++;document.getElementById('state').textContent='Movimento ricevuto · controlli disponibili';report();});
-document.getElementById('surface').addEventListener('click',()=>{clicks++;report();});report();
+let plays=0,seek=-1,moves=0;function report(){parent.postMessage({classicTest:1,plays,seek,moves,version:window.__saturnTV.version},'http://127.0.0.1:8766');}
+play.onclick=()=>{plays++;document.getElementById('result').textContent='Play originale ricevuto';report();};
+document.getElementById('seek').addEventListener(window.PointerEvent?'pointerdown':'mousedown',e=>{if(window.PointerEvent)e.currentTarget.setPointerCapture(e.pointerId);let r=e.currentTarget.getBoundingClientRect();seek=(e.clientX-r.left)/r.width;report();});
+document.addEventListener('mousemove',()=>{moves++;report();});
+window.addEventListener('message',e=>{if(e.origin==='http://127.0.0.1:8766'&&e.source===parent&&e.data.classicTest==='status')report();});report();
 </script></html>

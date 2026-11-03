@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {install} = require('../saturn.js');
+const {install} = require('../archive/saturn-0.8.0.js');
 function fixture(saved, media) {
   const events = {}, calls = [];
   const storage = new Map(saved ? [['saturn-bookmark', JSON.stringify(saved)]] : []);

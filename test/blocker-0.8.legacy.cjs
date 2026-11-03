@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {hostBlocked, install} = require('../saturn.js');
+const {hostBlocked, install} = require('../archive/saturn-0.8.0.js');
 function fixture(host = 'www.animesaturn.net', disabled = false) {
   const handlers = {};
   function Node() {}
@@ -148,11 +148,11 @@ test('player hover is authenticated and Enter follows the remote pointer after m
  f.win.addEventListener=(key,fn)=>events[key]=fn;
  f.win.document.elementFromPoint=()=>({dispatchEvent(event){moves.push(event);}});install(f.win);
  const enter=()=>events.keydown({keyCode:13,preventDefault(){},stopImmediatePropagation(){}});
- enter();assert.equal(messages.length,0); // Native Enter still starts an untouched player.
+ enter();assert.equal(messages.length,1); // Pointer clicks work before the first Play.
  const move=(origin,source,x)=>events.message({origin,source,data:{saturnTV:1,type:'move',x,y:40}});
  move('https://evil.test',parent,10);move('https://www.animesaturn.net',{},10);move('https://www.animesaturn.net',parent,900);move('https://www.animesaturn.net',parent,'10');assert.equal(moves.length,0);
  move('https://www.animesaturn.net',parent,10);assert.equal(moves[0].type,'mousemove');assert.equal(moves[0].clientY,40);
- enter();assert.deepEqual(messages[0],{saturnTV:1,type:'key',code:13,repeat:false});
+ enter();assert.deepEqual(messages.at(-1),{saturnTV:1,type:'key',code:13,repeat:false});
 });
 test('player seek clamps to video bounds, preserves pause and rejects unauthenticated commands',()=>{
  const f=fixture('play.saturncdn.net'),events={},reports=[],parent={postMessage(data){reports.push(data);}};
@@ -193,4 +193,23 @@ test('clicking a JW time slider seeks to the indicated coordinate',()=>{
  f.win.jwplayer=()=>({getState(){return'paused';},play(){},getDuration(){return 600;},getPosition(){return 0;},seek(v){seeks.push(v);}});install(f.win);
  events.message({source:parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'click',x:220,y:200}});
  assert.deepEqual(seeks,[300]);
+});
+test('trusted player forwards keys from the first OK even when top API access does not throw',()=>{
+ const f=fixture('play.saturncdn.net'),events={},messages=[];f.win.top={};f.win.parent={postMessage(data){messages.push(data);}};
+ f.win.addEventListener=(key,fn)=>events[key]=fn;install(f.win);
+ for(const keyCode of [13,39,10009])events.keydown({keyCode,preventDefault(){},stopImmediatePropagation(){}});
+ events.keyup({keyCode:39});assert.deepEqual(messages.map(m=>[m.type,m.code]),[['key',13],['key',39],['key',10009],['keyup',39]]);
+});
+test('Tizen 6 uses the native element for an authorized MP4 while refusing DRM and unsupported URLs',async()=>{
+ for(const source of [{file:'https://media.example/episode.mp4',native:true},{file:'https://media.example/episode.m3u8'},{file:'http://media.example/episode.mp4'},{file:'https://media.example/episode.mp4',drm:{widevine:{}}},{file:'https://media.example/episode.mp4',sources:[{file:'https://media.example/episode.mp4',drm:{widevine:{}}}]}]){
+  const f=fixture('play.saturncdn.net'),events={},reports=[],created=[],calls=[];
+  f.win.top={};f.win.parent={postMessage(data){reports.push(data);}};f.win.navigator={userAgent:'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.0) 76.0'};f.win.addEventListener=(key,fn)=>events[key]=fn;
+  const jw={getState(){return'idle';},getPlaylistItem(){return source;},play(){calls.push('jw');},stop(){calls.push('stop');},getDuration(){return 0;},getPosition(){return 0;}};
+  const container={style:{setProperty(){}}};f.win.jwplayer=()=>jw;f.win.document.querySelector=selector=>selector==='#jw-player'?container:null;
+  f.win.document.body={appendChild(v){created.push(v);}};f.win.document.createElement=tag=>({tagName:tag.toUpperCase(),style:{},paused:true,readyState:4,duration:600,currentTime:0,setAttribute(){},removeAttribute(name){this.removed=name;},play(){this.paused=false;calls.push('native');return Promise.resolve();}});
+  install(f.win);if(source.native)events.click({target:{getAttribute(key){return key==='class'?'jw-icon-display':null;}},preventDefault(){},stopImmediatePropagation(){}});else events.message({source:f.win.parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'play'}});await Promise.resolve();
+  assert.equal(created.length,source.native?1:0);
+  if(source.native){assert.deepEqual(calls,['stop','native']);assert.equal(created[0].src,source.file);assert.equal(created[0].removed,'crossorigin');assert.equal(reports.at(-1).engine,'Nativo TV');events.message({source:f.win.parent,origin:'https://evil.test',data:{as:'as-watch',type:'loadEpisode',link:'https://play.saturncdn.net/embed/177'}});events.message({source:f.win.parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'status'}});assert.equal(reports.at(-1).engine,'Nativo TV');events.message({source:f.win.parent,origin:'https://www.animesaturn.net',data:{as:'as-watch',type:'loadEpisode',link:'https://play.saturncdn.net/embed/177'}});events.message({source:f.win.parent,origin:'https://www.animesaturn.net',data:{saturnTV:1,type:'status'}});assert.equal(reports.at(-1).engine,'JW Player');}
+  else assert.deepEqual(calls,['jw']);
+ }
 });
