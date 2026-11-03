@@ -12,7 +12,9 @@ Usare sempre questa unica voce GitHub in TizenBrew:
     Mattia-testlab/saturn-tv
 
 Se è già presente, aprire quella: non aggiungere una nuova voce per ogni release.
-Gli aggiornamenti vengono pubblicati nello stesso repository, sul ramo main.
+Gli aggiornamenti vengono pubblicati nello stesso repository, sul ramo main,
+e contrassegnati da un tag di release SemVer per il CDN usato da TizenBrew.
+Il tag viene pubblicato dallo sviluppatore: il nome inserito sulla TV resta uguale.
 I suffissi @v0.x fissano una versione e non sono il canale da usare normalmente.
 
 Il servizio TizenBrew può tenere il vecchio codice in memoria. Quando una nuova
@@ -102,3 +104,8 @@ e il suo fullscreen nel banco reale sul Mac. La verifica finale sulla Samsung re
 aggiornabile sono alias di compatibilità; i tag Git pubblicati restano immutati.
 L’esperimento 0.8.0 è archiviato e non è il player attivo. I file legacy sono
 conservati per consultazione e non rientrano nella suite corrente.
+
+Per chi pubblica: jsDelivr senza suffisso seleziona l’ultima release SemVer,
+non semplicemente l’ultimo commit main. Ogni release deve quindi includere il tag
+corrispondente prima del controllo del canale stabile.
+[Documentazione jsDelivr](https://www.jsdelivr.com/documentation).
