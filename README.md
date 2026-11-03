@@ -1,4 +1,4 @@
-# Saturn TV 0.9.0 — player originale del sito
+# Saturn TV 0.9.1 — player originale del sito
 
 Modulo TizenBrew per la Samsung UE50AU9070UXZT. Questa versione segue la richiesta
 di usare il lettore classico di AnimeSaturn. Play, pausa, timeline, sorgente video,
@@ -34,8 +34,15 @@ uno strumento di sviluppo separato.
  pagina e liste segue il movimento, senza il precedente moltiplicatore 4×.
 - In fullscreen i tasti restano al player. Indietro usa l’uscita standard/WebKit
  o il pulsante di uscita originale nel fallback fullscreen del sito.
-- Fuori dal fullscreen, Indietro o Blu aprono una navigazione essenziale: Cerca,
- Puntate, Black Clover 50, Home, Aggiorna pagina, Chiudi. È nascosta inizialmente.
+- Fuori dal fullscreen, Indietro o Blu aprono la barra completa: Play/Pausa,
+ Schermo intero, Puntate, Cerca, Black Clover 50 e Altro. È nascosta inizialmente.
+- Play/Pausa e Schermo intero sono scorciatoie che cliccano i controlli originali
+ del sito. Non chiamano API del provider e non costruiscono un player alternativo.
+- Altro contiene Riprendi (riapre l’ultima pagina, senza cambiare il minuto del
+ video), Preferiti, Home, velocità cursore e overlay automatici.
+- Strumenti conserva Aggiorna, filtro ON/OFF, Nascondi overlay e ricordalo,
+ Annulla rimozione, Stato lettore e Versione attiva. Indietro dai sottomenu torna
+ alla barra principale. Preferiti e velocità usano le chiavi di memoria esistenti.
 
 La precisione del singolo tocco e la curva di movimento sono controllate nei test.
 La cadenza e il frame rate del telecomando sul firmware Samsung richiedono il
@@ -58,10 +65,13 @@ coordinate del bridge sono verificati. Il focus usa preventScroll.
 
 Sono bloccati popup e domini pubblicitari identificati, incluso il loader acscdn.com e viowrel.com
 osservato nell’iframe del sito. Le richieste del player e dei video passano inalterate.
-La pulizia cosmetica è limitata a risorse pubblicitarie e marcatori espliciti del
-sito; non usa euristiche per nascondere riquadri bianchi o modificare il player.
-Il MutationObserver ignora gli aggiornamenti style/class e i nodi di testo della
-riproduzione. Questo filtro non equivale a uBlock Origin e non garantisce il blocco
+La pulizia cosmetica automatica riguarda marcatori pubblicitari, domini noti e
+regole apprese usando Nascondi overlay. La rimozione manuale seleziona riquadri
+fissi grandi esterni al player; Annulla li ripristina e sospende l’automatismo.
+Video, contenitore e controlli del player sono protetti. Non nasconde qualsiasi
+riquadro bianco indiscriminatamente. L’osservatore generale ignora style/class e
+i nodi di testo; solo gli overlay già riconosciuti con ID hanno un osservatore
+specifico, esterno al player. Questo filtro non equivale a uBlock Origin e non garantisce il blocco
 di ogni inserzione caricata prima dell’iniezione del modulo.
 
 ## Verifica
@@ -85,9 +95,10 @@ Le prove reali sul Mac hanno verificato avvio con OK sul Play originale, avanzam
 del video 1280×720 con readyState 4, clic sulla timeline, ingresso e uscita dal
 fullscreen del sito, con un solo video e senza controlli di riproduzione aggiunti.
 L’audio del browser di prova è silenziato; non si dichiara verificato l’ascolto.
-La verifica finale sulla Samsung resta necessaria.
+Anche le scorciatoie della barra 0.9.1 hanno avviato il video originale (readyState 4)
+e il suo fullscreen nel banco reale sul Mac. La verifica finale sulla Samsung resta necessaria.
 
-`saturn.js` e `saturn-0.9.0.js` sono identici. Le vecchie copie 0.6/0.7/0.8 sul ramo
+`saturn.js` e `saturn-0.9.1.js` sono identici. Le vecchie copie 0.6/0.7/0.8 sul ramo
 aggiornabile sono alias di compatibilità; i tag Git pubblicati restano immutati.
 L’esperimento 0.8.0 è archiviato e non è il player attivo. I file legacy sono
 conservati per consultazione e non rientrano nella suite corrente.

@@ -1,6 +1,6 @@
 <!doctype html><html lang="it"><meta charset="utf-8"><title>Controlli originali di prova</title>
 <style>body{margin:0;background:#17222d;color:white;font:22px sans-serif}#play{position:fixed;left:40%;top:45%;width:20%;height:10%;font:inherit}#seek{position:fixed;left:10%;width:80%;top:70%;height:28px;background:#8cdeff}#result{position:fixed;left:20px;top:20px}</style>
-<div id="result">Player del sito simulato</div><button id="play">Play del sito</button><div id="seek" role="slider" tabindex="0" aria-label="Timeline del sito"></div>
+<div id="result">Player del sito simulato</div><button id="play" class="jw-icon-playback">Play del sito</button><div id="seek" role="slider" tabindex="0" aria-label="Timeline del sito"></div>
 <script>Object.defineProperty(window,'jwplayer',{get(){throw Error('Il modulo non deve chiamare il provider');}});</script><script src="saturn-bridge-test.js"></script>
 <script>
 let plays=0,seek=-1,moves=0;function report(){parent.postMessage({classicTest:1,plays,seek,moves,version:window.__saturnTV.version},'http://127.0.0.1:8766');}

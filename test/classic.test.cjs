@@ -6,15 +6,15 @@ function fixture(host='www.animesaturn.net',child=false){
  class El{
   constructor(tag){this.tagName=tag.toUpperCase();this.children=[];this.attrs={};this.style={};this.handlers={};this.nodeType=1;}
   appendChild(n){this.children.push(n);n.parentNode=this;return n;}insertBefore(n){return this.appendChild(n);}removeChild(n){this.children=this.children.filter(x=>x!==n);n.parentNode=null;}
-  setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k]||null;}hasAttribute(k){return k in this.attrs;}
+  removeAttribute(k){delete this.attrs[k];}setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k]||null;}hasAttribute(k){return k in this.attrs;}
   addEventListener(k,f){this.handlers[k]=f;}querySelectorAll(){return [];}querySelector(){return null;}
   focus(options){doc.activeElement=this;this.focusOptions=options;}click(){if(this.handlers.click)this.handlers.click.call(this,{preventDefault(){},stopPropagation(){}});}dispatchEvent(e){if(this.handlers[e.type])this.handlers[e.type].call(this,e);return true;}
  }
  doc={body:new El('body'),documentElement:{},activeElement:null,createElement(tag){changes.push(['create',tag]);return new El(tag);},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(k,f){docEvents[k]=f;}};
  const parent={postMessage(data,origin){sent.push({data,origin});}};
- const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+'/',assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
+ const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+'/',assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
  win.top=child?{}:win;win.parent=parent;
- const api=install(win);
+ const api=install(win);sent.length=0;
  function key(code,target){let stopped=false;events.keydown({keyCode:code,target:target||doc.activeElement,preventDefault(){stopped=true;},stopImmediatePropagation(){}});return stopped;}
  function message(data,origin='https://www.animesaturn.net',source=parent){events.message({data:{saturnTV:1,...data},origin,source});}
  return{api,win,doc,events,docEvents,sent,changes,storage,key,message,El};
@@ -42,9 +42,9 @@ test('disabled filter preserves ordinary open/fetch',async()=>{
 test('dynamic ad resources are rejected without blocking the player iframe',()=>{
  const f=fixture(),parent=new f.El('div'),ad=new f.El('script'),frame=new f.El('iframe');ad.setAttribute('src','https://acscdn.com/code');frame.setAttribute('src','https://play.saturncdn.net/embed/176');parent.appendChild(ad);parent.appendChild(frame);assert.deepEqual(parent.children,[frame]);
 });
-test('navigation is hidden initially and contains no playback/fullscreen controls',()=>{
+test('Back restores the complete quick menu without a custom playback panel',()=>{
  const f=fixture();assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'||e.id==='saturn-cinema-controls'||e.id==='saturn-menu'));
- f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Cerca','Puntate','Black Clover · 50','Home','Aggiorna pagina','Chiudi']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
+ f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Play / Pausa','Schermo intero','Puntate','Cerca','Black Clover · 50','Altro']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
 });
 test('first OK inside the player forwards a pointer click before playback',()=>{
  const f=fixture('play.saturncdn.net',true);assert.equal(f.key(13),true);assert.equal(f.sent[0].data.type,'key');assert.equal(f.sent[0].data.code,13);
@@ -93,4 +93,35 @@ test('site fullscreen fallback keeps native keys and Back uses the original exit
 });
 test('key names preserve press/release when a browser reports keyCode zero',()=>{
  const f=fixture('play.saturncdn.net',true);f.events.keydown({keyCode:0,key:'ArrowRight',preventDefault(){},stopImmediatePropagation(){}});f.events.keyup({keyCode:0,key:'ArrowRight',preventDefault(){},stopImmediatePropagation(){}});assert.deepEqual(f.sent.map(m=>[m.data.type,m.data.code]),[['key',39],['keyup',39]]);
+});
+function barButtons(f){return f.doc.body.children.find(e=>e.id==='saturn-toolbar').children.filter(e=>e.tagName==='BUTTON');}
+test('settings, favorites and tools are restored and Back returns to the main bar',()=>{
+ const f=fixture();f.key(10009);f.api.actions.settings();assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='resume'));assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='favorites'));f.api.actions.tools();assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='undoOverlay'));f.key(10009);assert.equal(barButtons(f)[0].getAttribute('data-saturn-action'),'toggleVideo');f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
+});
+test('existing favorites and the last episode survive the restored menu',()=>{
+ const f=fixture();f.storage.set('saturn-favorites',JSON.stringify([{url:'https://www.animesaturn.net/anime/old/ep-3',title:'Salvato prima'},{url:'javascript:alert(1)',title:'Unsafe'}]));f.api.actions.favorites();assert.ok(barButtons(f).some(b=>b.textContent==='Salvato prima'));assert.ok(!barButtons(f).some(b=>b.textContent==='Unsafe'));
+ f.win.location.href='https://www.animesaturn.net/anime/current/ep-50';f.api.actions.addFavorite();assert.equal(JSON.parse(f.storage.get('saturn-favorites'))[0].url,f.win.location.href);
+ f.storage.set('saturn-last',JSON.stringify({url:'https://www.animesaturn.net/anime/old/ep-3'}));f.api.actions.resume();assert.deepEqual(f.changes.at(-1),['navigate','https://www.animesaturn.net/anime/old/ep-3']);
+});
+test('episode navigation uses real adjacent links from the current series',()=>{
+ const f=fixture();f.win.location.href='https://www.animesaturn.net/anime/show/ep-50';f.doc.querySelectorAll=selector=>selector==='a[href]'?['/anime/show/ep-49','/anime/show/ep-51','/anime/other/ep-50'].map(url=>({getAttribute(){return url;}})):[];
+ f.api.actions.previousEpisode();f.api.actions.nextEpisode();assert.deepEqual(f.changes.filter(c=>c[0]==='navigate'),[['navigate','https://www.animesaturn.net/anime/show/ep-49'],['navigate','https://www.animesaturn.net/anime/show/ep-51']]);
+});
+test('speed preferences and filter state use the existing storage keys',()=>{
+ const f=fixture();f.api.actions.speed();assert.equal(JSON.parse(f.storage.get('saturn-speed')),700);f.api.actions.autoOverlay();assert.equal(f.storage.get('saturn-auto-overlay'),'0');f.api.actions.filter();assert.equal(f.storage.get('saturn-disabled'),'1');assert.deepEqual(f.changes.at(-1),['reload']);
+});
+test('quick Play/fullscreen controls click only the original UI, never a provider API',()=>{
+ const f=fixture('play.saturncdn.net',true),received=[];let apiCalls=0;f.win.jwplayer=()=>{apiCalls++;throw Error('Not allowed');};
+ const control={tagName:'DIV',getAttribute(k){return k==='role'?'button':null;},getBoundingClientRect(){return{left:20,top:30,width:40,height:20};},dispatchEvent(e){received.push(e.type);}};
+ f.doc.querySelector=selector=>/jw-icon/.test(selector)?control:null;
+ f.message({type:'uiControl',action:'toggleVideo'});f.message({type:'uiControl',action:'fullscreen'});assert.equal(apiCalls,0);assert.equal(received.filter(t=>t==='click').length,2);assert.equal(f.sent.filter(m=>m.data.type==='controlResult'&&m.data.found).length,2);
+ received.length=0;f.message({type:'uiControl',action:'toggleVideo'},'https://evil.test');assert.equal(received.length,0);
+});
+test('overlay hiding and undo protect every element inside the original player',()=>{
+ const f=fixture(),jw=new f.El('div'),legitimate=new f.El('div'),ad=new f.El('div');jw.id='jw-player';jw.appendChild(legitimate);ad.id='learned-ad';ad.setAttribute('style','position:fixed;z-index:9000');
+ for(const el of [legitimate,ad]){el.getBoundingClientRect=()=>({width:1200,height:700});el.style.setProperty=(name,value)=>{el.style[name]=value;};}
+ f.win.getComputedStyle=el=>({position:'fixed',display:el.style.display||'block',visibility:'visible',opacity:'1',pointerEvents:'auto',zIndex:el===legitimate?'999999':'9000'});
+ f.doc.querySelectorAll=selector=>selector==='div,section,aside,iframe,dialog'?[legitimate,ad]:[];
+ f.api.actions.overlay();assert.equal(ad.style.display,'none');assert.equal(legitimate.style.display,undefined);assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,1);
+ f.api.actions.undoOverlay();assert.equal(ad.getAttribute('style'),'position:fixed;z-index:9000');assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,0);
 });

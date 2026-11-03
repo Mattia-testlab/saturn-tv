@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV 0.9.0 · bridge classico</title><style>body{background:#101820;color:white;font:18px sans-serif}iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:0}#results{position:relative;z-index:2;max-width:38%;background:#101820;padding:16px}li{padding:4px}</style>
+<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV 0.9.1 · bridge classico</title><style>body{background:#101820;color:white;font:18px sans-serif}iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:0}#results{position:relative;z-index:2;max-width:38%;background:#101820;padding:16px}li{padding:4px}</style>
 <iframe id="watch-iframe" src="http://localhost:8766/player.html" title="Player originale di prova"></iframe><ul id="results"></ul><script src="saturn-bridge-test.js"></script>
 <script>
 (async()=>{
@@ -7,11 +7,12 @@
  function check(text,ok){let li=document.createElement('li');li.textContent=(ok?'PASS — ':'FAIL — ')+text;results.appendChild(li);}
  function key(code,type='keydown'){(document.activeElement||document).dispatchEvent(new KeyboardEvent(type,{keyCode:code,bubbles:true,cancelable:true}));}
  for(let i=0;i<50&&!state;i++){frame.contentWindow.postMessage({classicTest:'status'},'http://localhost:8766');await sleep(50);}
- check('Il modulo si collega al contesto del player',!!state&&state.version==='0.9.0');key(13);await sleep(60);check('OK attiva il Play originale',state&&state.plays===1);
+ check('Il modulo si collega al contesto del player',!!state&&state.version==='0.9.1');key(13);await sleep(60);check('OK attiva il Play originale',state&&state.plays===1);
  key(40);key(40,'keyup');await sleep(60);check('Il player riceve il movimento della freccia',state&&state.moves>0);
  // The same production click bridge dispatches coordinates to the site's own listener.
  frame.contentWindow.postMessage({saturnTV:1,type:'click',x:innerWidth*.7,y:innerHeight*.7+10},'http://localhost:8766');await sleep(60);check('Timeline originale riceve il punto indicato',state&&state.seek>.7&&state.seek<.8);
  check('Nessun player o transport alternativo nel parent',!document.querySelector('video,#saturn-native-video,#saturn-cinema-controls'));
  key(10009);check('Navigazione aperta senza comandare il video',!!document.getElementById('saturn-toolbar')&&state.plays===1);key(10009);
+ key(10009);document.querySelector('[data-saturn-action=toggleVideo]').click();await sleep(100);check('Scorciatoia barra usa il Play originale',state.plays===2&&!document.getElementById('saturn-toolbar'));
 })();
 </script></html>
