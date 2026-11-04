@@ -261,3 +261,28 @@ test('exitNative restores pointer display after fullscreen exit',()=>{
  f.key(10009);// Back in fullscreen exits
  assert.equal(f.doc.fullscreenElement,null);
 });
+
+test('repeated Play while loading runs once, and old or other-page commands expire',t=>{
+ let now=1000;t.mock.method(Date,'now',()=>now);
+ for(const scenario of ['duplicate','expired','other-page']){
+  const f=fixture(),sent=[];for(let i=0;i<20;i++)f.api.actions.toggleVideo();
+  if(scenario==='expired')now+=6000;if(scenario==='other-page')f.win.location.href+='anime/another/ep-1';
+  const frame=new f.El('iframe');frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/123';frame.contentWindow={postMessage(data){sent.push(data);}};f.doc.querySelector=s=>s==='iframe#watch-iframe'?frame:null;
+  f.message({type:'ready'},'https://play.saturncdn.net',frame.contentWindow);f.message({type:'ready'},'https://play.saturncdn.net',frame.contentWindow);
+  assert.equal(sent.filter(d=>d.type==='uiControl').length,scenario==='duplicate'?1:0);
+ }
+});
+test('favorite details open, pin to the six-button bar, remove and undo without losing other entries',()=>{
+ const f=fixture(),a={url:'https://www.animesaturn.net/anime/a/ep-5',title:'Serie A'},b={url:'https://www.animesaturn.net/anime/b',title:'Serie B'};
+ f.storage.set('saturn-favorites',JSON.stringify([a,b,null]));f.api.actions.favorites();f.api.actions.favorite0();
+ assert.deepEqual(barButtons(f).map(b=>b.textContent),['Torna ai preferiti','Apri','Mostra nella barra','Rimuovi dai preferiti']);
+ f.api.actions.openFavorite();assert.deepEqual(f.changes.at(-1),['navigate',a.url]);
+ f.api.actions.pinFavorite();assert.equal(barButtons(f).length,6);assert.ok(barButtons(f).some(b=>b.textContent==='Serie A'));f.api.actions.openShortcut();assert.deepEqual(f.changes.at(-1),['navigate',a.url]);
+ f.api.actions.favorites();f.api.actions.favorite0();f.key(10009);assert.ok(barButtons(f).some(b=>b.textContent==='Aggiungi questa pagina'));
+ f.api.actions.favorite0();f.api.actions.removeFavorite();assert.deepEqual(JSON.parse(f.storage.get('saturn-favorites')),[b]);assert.ok(barButtons(f).some(b=>b.textContent==='Annulla rimozione'));
+ f.api.actions.restoreFavorite();assert.deepEqual(JSON.parse(f.storage.get('saturn-favorites')),[a,b]);
+});
+test('invalid shortcuts fall back safely and adding favorites tolerates malformed saved entries',()=>{
+ const f=fixture();f.storage.set('saturn-shortcut',JSON.stringify({url:'javascript:alert(1)',title:'Invalid'}));f.api.actions.openShortcut();assert.deepEqual(f.changes.at(-1),['navigate','https://www.animesaturn.net/anime/black-clover-67Dip/ep-70']);
+ f.storage.set('saturn-favorites',JSON.stringify([null,{url:'javascript:alert(1)'}]));f.api.actions.addFavorite();assert.equal(JSON.parse(f.storage.get('saturn-favorites')).length,1);
+});

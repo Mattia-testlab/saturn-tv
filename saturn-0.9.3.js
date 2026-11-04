@@ -1,7 +1,7 @@
-/* Saturn TV 0.9.4 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.5 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.4';
+  var version='0.9.5';
   var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com'];
   function hostBlocked(host){host=String(host||'').toLowerCase().replace(/\.$/,'');return adHosts.some(function(h){return host===h||host.slice(-h.length-1)==='.'+h;});}
   function siteHost(host){return /^(www\.)?animesaturn\.net$/.test(String(host).toLowerCase());}
@@ -73,7 +73,7 @@
       pointer.style.transform='translate3d('+cursorX+'px,'+cursorY+'px,0)';pointer.style.display=bar||fullscreen()?'none':'block';return true;
     }
     function wake(){if(!ensurePointer())return;if(pointer&&!bar)pointer.style.display=fullscreen()?'none':'block';if(idle&&win.clearTimeout)win.clearTimeout(idle);idle=win.setTimeout(function(){if(pointer&&!bar)pointer.style.display='none';},3500);}
-    var view='main',lastAction={},message=null,hiddenOverlays=[],autoOverlay=true;
+    var view='main',lastAction={},message=null,hiddenOverlays=[],autoOverlay=true,selectedFavorite=null,removedFavorite=null;
     function readJSON(key,fallback){try{var raw=win.localStorage.getItem(key);if(raw===null)return fallback;var val=JSON.parse(raw);return val!==null&&val!==undefined?val:fallback;}catch(e){return fallback;}}
     function writeJSON(key,value){try{win.localStorage.setItem(key,JSON.stringify(value));return true;}catch(e){report('Memoria non disponibile.');return false;}}
     var learned=readJSON('saturn-overlay-rules',[]);if(!Array.isArray(learned))learned=[];
@@ -81,6 +81,8 @@
     try{autoOverlay=win.sessionStorage.getItem('saturn-auto-overlay')!=='0';}catch(e){}
     function report(text){if(message)message.textContent=text;}
     function safePage(page){try{var u=new win.URL(page.url);return u.protocol==='https:'&&siteHost(u.hostname)&&!u.username&&!u.password;}catch(e){return false;}}
+    function favoritePages(){var list=readJSON('saturn-favorites',[]);return Array.isArray(list)?list.filter(safePage).slice(0,12):[];}
+    function shortcutPage(){var saved=readJSON('saturn-shortcut',null);return safePage(saved)?saved:{url:'https://www.animesaturn.net/anime/black-clover-67Dip/ep-70',title:'Black Clover · 70'};}
     function latestPage(){var saved=readJSON('saturn-last',null);if(!safePage(saved))saved=readJSON('saturn-bookmark',null);return safePage(saved)?saved:null;}
     function rememberPage(){if(top&&/^\/(?:anime|episode)\/[^/]+\/ep-\d+/.test(new win.URL(win.location.href).pathname))writeJSON('saturn-last',{url:win.location.href,title:doc.title||'Ultima puntata'});}
     function close(){if(!bar)return;if(doc.activeElement&&doc.activeElement.getAttribute){var action=doc.activeElement.getAttribute('data-saturn-action');if(action)lastAction[view]=action;}if(editing(doc.activeElement))leaveEditing(doc.activeElement);bar.parentNode.removeChild(bar);bar=null;buttons=[];message=null;if(previousFocus&&!editing(previousFocus)&&!own(previousFocus)&&previousFocus.isConnected!==false)focus(previousFocus);previousFocus=null;wake();}
@@ -94,7 +96,7 @@
       Array.prototype.forEach.call(doc.querySelectorAll('a[href]'),function(link){try{var u=new win.URL(link.getAttribute('href'),win.location.href),m=u.pathname.match(/^\/(?:anime|episode)\/([^/]+)\/ep-(\d+)/);if(!m||m[1]!==match[1]||!allowed(u.href))return;var n=Number(m[2]);if(n<current&&n>lower){lower=n;result.previous=u.href;}if(n>current&&n<higher){higher=n;result.next=u.href;}}catch(e){}});return result;
     }
     var pendingPlayer=[];
-    function sendPlayer(data){var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');if(!trustedFrame(frame)){if(data.type==='uiControl')pendingPlayer.push(data);return false;}frame.contentWindow.postMessage(data,'https://play.saturncdn.net');return true;}
+    function sendPlayer(data){var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');if(!trustedFrame(frame)){if(data.type==='uiControl'){pendingPlayer=pendingPlayer.filter(function(item){return item.data.action!==data.action&&Date.now()-item.time<5000&&item.page===win.location.href;});pendingPlayer.push({data:data,time:Date.now(),page:win.location.href});}return false;}frame.contentWindow.postMessage(data,'https://play.saturncdn.net');return true;}
     function settingsSync(){if(top)sendPlayer({saturnTV:1,type:'settings',enabled:api.enabled,autoOverlay:autoOverlay});}
     function localControl(action){
       var ctrl=originalControl(action);
@@ -106,26 +108,32 @@
       }
       return false;
     }
-    function playerControl(action){if(localControl(action))return;if(!sendPlayer({saturnTV:1,type:'uiControl',action:action}))report('Nessun video trovato.');}
+    function playerControl(action){if(localControl(action))return;if(!sendPlayer({saturnTV:1,type:'uiControl',action:action}))report('Lettore in caricamento. Attendi prima di riprovare.');}
     function setAuto(value){autoOverlay=!!value;try{win.sessionStorage.setItem('saturn-auto-overlay',autoOverlay?'1':'0');}catch(e){}refreshLabels();if(autoOverlay)scanOverlays(doc);}
     function refreshLabels(){buttons.forEach(function(b){var action=b.getAttribute('data-saturn-action');if(action==='speed')b.textContent='Cursore: '+(cursorSpeed===350?'lento':cursorSpeed===500?'medio':'veloce');if(action==='autoOverlay')b.textContent='Overlay automatici: '+(autoOverlay?'ON':'OFF');});}
     function navigation(){
       if(!top||!doc.body)return;if(bar){close();return;}stop();previousFocus=doc.activeElement;
       bar=doc.createElement('section');bar.id='saturn-toolbar';bar.setAttribute('data-view',view);bar.setAttribute('aria-label','Comandi Saturn TV');bar.style.cssText='position:fixed;top:3vh;left:3vw;right:3vw;z-index:2147483647;background:#101820;color:#eef6ff;padding:20px;font:22px/1.4 sans-serif;max-height:88vh;overflow:auto;box-sizing:border-box';
-      var style=doc.createElement('style');style.textContent='#saturn-toolbar button{font:inherit;min-height:54px;padding:12px 16px;margin:6px;border:1px solid #72899c;background:#1d3040;color:#eef6ff;box-sizing:border-box}#saturn-toolbar[data-view=main] button{width:calc(33.333% - 12px)}#saturn-toolbar button:focus{outline:3px solid #8cdeff;outline-offset:2px}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575}';bar.appendChild(style);
-      var title=doc.createElement('div');title.textContent=(view==='settings'?'Altre opzioni':view==='episodes'?'Puntate':view==='tools'?'Strumenti':view==='favorites'?'Preferiti':'Saturn TV')+' · '+version;bar.appendChild(title);
+      var style=doc.createElement('style');style.textContent='#saturn-toolbar button{font:inherit;min-height:54px;padding:12px 16px;margin:6px;border:1px solid #72899c;background:#1d3040;color:#eef6ff;box-sizing:border-box}#saturn-toolbar[data-view=main] button{width:calc(33.333% - 12px)}#saturn-toolbar button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#saturn-toolbar button:focus{outline:3px solid #8cdeff;outline-offset:2px}#saturn-toolbar button:disabled{color:#adbdca;border-color:#526575}';bar.appendChild(style);
+      var title=doc.createElement('div');title.textContent=(view==='settings'?'Altre opzioni':view==='episodes'?'Puntate':view==='tools'?'Strumenti':view==='favorite'?(selectedFavorite&&selectedFavorite.title||'Preferito'):view==='favorites'?'Preferiti':'Saturn TV')+' · '+version;bar.appendChild(title);
       var specs,neighbors=episodeLinks();
-      if(view==='main')specs=[['Play / Pausa','toggleVideo'],['Schermo intero','fullscreen'],['Puntata prec.','previousEpisode'],['Puntata succ.','nextEpisode'],['Black Clover · 70','blackClover70'],['Altro','settings']];
-      else if(view==='settings')specs=[['Torna','main'],['Riprendi','resume'],['Cambia player','switchPlayer'],['Cerca','search'],['Puntate','episodes'],['Preferiti','favorites'],['Home','home'],['Velocità cursore','speed'],['Overlay automatici','autoOverlay'],['Strumenti','tools']];
+      if(view==='main')specs=[['Play / Pausa','toggleVideo'],['Schermo intero','fullscreen'],['Puntata prec.','previousEpisode'],['Puntata succ.','nextEpisode'],[shortcutPage().title||'Preferito','openShortcut'],['Altro','settings']];
+      else if(view==='settings')specs=[['Torna','main'],['Ultima puntata','resume'],['Cambia player','switchPlayer'],['Cerca','search'],['Puntate','episodes'],['Preferiti','favorites'],['Home','home'],['Velocità cursore','speed'],['Overlay automatici','autoOverlay'],['Strumenti','tools']];
       else if(view==='episodes')specs=[['Torna','main'],['Puntata precedente','previousEpisode'],['Puntata successiva','nextEpisode'],['Mostra lista puntate','episodeList']];
       else if(view==='tools')specs=[['Torna','settings'],['Aggiorna pagina','reload'],[api.enabled?'Disattiva filtro':'Attiva filtro','filter'],['Nascondi overlay e ricordalo','overlay'],['Annulla rimozione','undoOverlay'],['Stato lettore','playerStatus'],['Versione attiva','info']];
-      else{specs=[['Torna','main'],['Aggiungi questa pagina','addFavorite']];var favorites=readJSON('saturn-favorites',[]);if(!Array.isArray(favorites))favorites=[];favorites.filter(safePage).slice(0,12).forEach(function(saved,i){var action='favorite'+i;api.actions[action]=function(){win.location.assign(saved.url);};specs.push([saved.title||saved.url,action]);});}
+      else if(view==='favorite')specs=[['Torna ai preferiti','favorites'],['Apri','openFavorite'],['Mostra nella barra','pinFavorite'],['Rimuovi dai preferiti','removeFavorite']];
+      else{specs=[['Torna','main'],['Aggiungi questa pagina','addFavorite']];if(removedFavorite)specs.push(['Annulla rimozione','restoreFavorite']);favoritePages().forEach(function(saved,i){var action='favorite'+i;api.actions[action]=function(){selectedFavorite=saved;lastAction.favorite='openFavorite';switchView('favorite');};specs.push([saved.title||saved.url,action]);});}
       specs.forEach(function(spec){var b=doc.createElement('button');b.type='button';b.textContent=spec[0];b.setAttribute('data-saturn-action',spec[1]);if(spec[1]==='resume')b.disabled=!latestPage();if(spec[1]==='previousEpisode')b.disabled=!neighbors.previous&&!doc.querySelector('button[title*="precedente" i]');if(spec[1]==='nextEpisode')b.disabled=!neighbors.next&&!doc.querySelector('button[title*="successivo" i]');b.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();lastAction[view]=spec[1];api.actions[spec[1]]();});bar.appendChild(b);buttons.push(b);});
-      message=doc.createElement('p');message.setAttribute('role','status');message.setAttribute('aria-live','polite');message.textContent=view==='main'?'Frecce · OK seleziona · Indietro chiude':view==='tools'?'Aggiorna e cambio filtro ricaricano la pagina.':'Indietro torna alla barra principale.';bar.appendChild(message);
+      message=doc.createElement('p');message.setAttribute('role','status');message.setAttribute('aria-live','polite');message.textContent=view==='main'?'Frecce · OK seleziona · Indietro chiude':view==='tools'?'Aggiorna e cambio filtro ricaricano la pagina.':view==='settings'?'Ultima puntata riapre la pagina; il minuto non viene salvato.':view==='favorites'?'Scegli un preferito per aprirlo o modificarlo.':view==='favorite'?'Mostra nella barra sostituisce il collegamento rapido.':'Indietro torna alla barra principale.';bar.appendChild(message);
       doc.body.appendChild(bar);refreshLabels();focus(buttons.filter(function(b){return !b.disabled&&b.getAttribute('data-saturn-action')===lastAction[view];})[0]||buttons.filter(function(b){return !b.disabled;})[0]);ensurePointer();
     }
     api.actions={main:function(){switchView('main');},close:close,search:search,episodes:function(){switchView('episodes');},episodeList:episodeList,settings:function(){switchView('settings');},tools:function(){switchView('tools');},favorites:function(){switchView('favorites');},
       toggleVideo:function(){playerControl('toggleVideo');},fullscreen:function(){playerControl('fullscreen');},playerStatus:function(){playerControl('status');},
+      openShortcut:function(){win.location.assign(shortcutPage().url);},
+      openFavorite:function(){if(safePage(selectedFavorite))win.location.assign(selectedFavorite.url);},
+      pinFavorite:function(){if(safePage(selectedFavorite)&&writeJSON('saturn-shortcut',selectedFavorite)){switchView('main');report('Collegamento rapido aggiornato.');}},
+      removeFavorite:function(){if(!safePage(selectedFavorite))return;var saved=favoritePages().filter(function(item){return item.url!==selectedFavorite.url;});if(writeJSON('saturn-favorites',saved)){removedFavorite=selectedFavorite;selectedFavorite=null;switchView('favorites');report('Preferito rimosso. Puoi annullare la rimozione.');}},
+      restoreFavorite:function(){if(!safePage(removedFavorite))return;var saved=favoritePages().filter(function(item){return item.url!==removedFavorite.url;});saved.unshift(removedFavorite);if(writeJSON('saturn-favorites',saved.slice(0,12))){removedFavorite=null;switchView('favorites');}},
       home:function(){win.location.assign('https://www.animesaturn.net/');},
       blackClover70:function(){win.location.assign('https://www.animesaturn.net/anime/black-clover-67Dip/ep-70');},
       blackClover50:function(){win.location.assign('https://www.animesaturn.net/anime/black-clover-67Dip/ep-50');},
@@ -152,7 +160,7 @@
       },
       resume:function(){var saved=latestPage();if(saved)win.location.assign(saved.url);else report('Nessuna puntata salvata.');},
       save:function(){var entry={url:win.location.href,title:doc.title||'Puntata'};if(safePage(entry)&&writeJSON('saturn-bookmark',entry))report('Pagina salvata.');},
-      addFavorite:function(){var entry={url:win.location.href,title:doc.title||'Puntata'};if(!safePage(entry))return;var saved=readJSON('saturn-favorites',[]);if(!Array.isArray(saved))saved=[];saved=saved.filter(function(item){return item.url!==entry.url;});saved.unshift(entry);if(writeJSON('saturn-favorites',saved.slice(0,12)))switchView('favorites');},
+      addFavorite:function(){var entry={url:win.location.href,title:doc.title||'Puntata'};if(!safePage(entry))return;var saved=favoritePages().filter(function(item){return item.url!==entry.url;});saved.unshift(entry);if(writeJSON('saturn-favorites',saved.slice(0,12)))switchView('favorites');},
       speed:function(){cursorSpeed=cursorSpeed===350?500:cursorSpeed===500?700:350;writeJSON('saturn-speed',cursorSpeed);refreshLabels();},
       autoOverlay:function(){setAuto(!autoOverlay);settingsSync();},overlay:function(){if(!hideOverlay(false,doc)&&!sendPlayer({saturnTV:1,type:'utility',action:'overlay'}))report('Nessun overlay separabile dal player trovato.');},
       undoOverlay:function(){setAuto(false);settingsSync();if(!undoOverlay()&&!sendPlayer({saturnTV:1,type:'utility',action:'undoOverlay'}))report('Nessuna rimozione da annullare.');},
@@ -301,7 +309,7 @@
         return;
       }
       if(code===405){prevent(event);if(!event.repeat)api.actions.filter();return;}
-      if(code===10009||code===406){prevent(event);if(!event.repeat){if(bar&&view!=='main')switchView('main');else navigation();}return;}
+      if(code===10009||code===406){prevent(event);if(!event.repeat){if(bar&&view!=='main')switchView(view==='favorite'?'favorites':'main');else navigation();}return;}
       if(bar){
         if([37,38,39,40,13,27].indexOf(code)===-1)return;prevent(event);
         if(code===27){close();return;}if(code===13){if(!event.repeat&&buttons.indexOf(doc.activeElement)!==-1)doc.activeElement.click();return;}
@@ -324,7 +332,7 @@
     if(win.addEventListener)win.addEventListener('message',function(event){
       var data=event.data;if(!data||data.saturnTV!==1)return;
       if(top){var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');if(!trustedFrame(frame)||event.source!==frame.contentWindow||event.origin!=='https://play.saturncdn.net')return;
-        if(data.type==='ready'){settingsSync();while(pendingPlayer.length)sendPlayer(pendingPlayer.shift());}
+        if(data.type==='ready'){settingsSync();var queued=pendingPlayer;pendingPlayer=[];queued.forEach(function(item){if(Date.now()-item.time<5000&&item.page===win.location.href)sendPlayer(item.data);});}
         else if(data.type==='fullscreen'){playerFullscreen=!!data.active;if(pointer)pointer.style.display=(bar||fullscreen())?'none':'block';}
         else if(data.type==='controlResult'){
           if(data.action==='status'){var state=data.status||{};report('Lettore del sito · '+(state.paused?'pausa':'play')+' · pronto '+state.ready+' · '+state.time+' s · '+state.width+'×'+state.height+(state.error?' · '+state.error:''));}

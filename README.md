@@ -1,3 +1,13 @@
+# Novità 0.9.5
+
+- Preferiti: seleziona una voce per aprirla, mostrarla nella barra o rimuoverla.
+  La rimozione si può annullare finché la pagina resta aperta.
+- La barra mantiene sei pulsanti: il preferito scelto sostituisce Black Clover 70.
+- Riprendi si chiama Ultima puntata: riapre la pagina, senza promettere il minuto.
+- Prima che il player sia disponibile, i comandi uguali vengono accorpati;
+  dopo cinque secondi o un cambio pagina sono scartati.
+- Filtro pubblicitario e regole overlay invariati rispetto alla 0.9.4.
+
 # Saturn TV 0.9.4 — player originale del sito
 
 Modulo TizenBrew per la Samsung UE50AU9070UXZT. Questa versione integra il supporto
