@@ -94,7 +94,7 @@ test('site fullscreen fallback keeps native keys and Back uses the original exit
 test('key names preserve press/release when a browser reports keyCode zero',()=>{
  const f=fixture('play.saturncdn.net',true);f.events.keydown({keyCode:0,key:'ArrowRight',preventDefault(){},stopImmediatePropagation(){}});f.events.keyup({keyCode:0,key:'ArrowRight',preventDefault(){},stopImmediatePropagation(){}});assert.deepEqual(f.sent.map(m=>[m.data.type,m.data.code]),[['key',39],['keyup',39]]);
 });
-function barButtons(f){return f.doc.body.children.find(e=>e.id==='saturn-toolbar').children.filter(e=>e.tagName==='BUTTON');}
+function barButtons(f){const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');return bar?bar.children.filter(e=>e.tagName==='BUTTON'):[];}
 test('settings, favorites and tools are restored and Back returns to the main bar',()=>{
  const f=fixture();f.key(10009);f.api.actions.settings();assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='resume'));assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='favorites'));f.api.actions.tools();assert.ok(barButtons(f).some(b=>b.getAttribute('data-saturn-action')==='undoOverlay'));f.key(10009);assert.equal(barButtons(f)[0].getAttribute('data-saturn-action'),'toggleVideo');f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
 });
@@ -124,4 +124,113 @@ test('overlay hiding and undo protect every element inside the original player',
  f.doc.querySelectorAll=selector=>selector==='div,section,aside,iframe,dialog'?[legitimate,ad]:[];
  f.api.actions.overlay();assert.equal(ad.style.display,'none');assert.equal(legitimate.style.display,undefined);assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,1);
  f.api.actions.undoOverlay();assert.equal(ad.getAttribute('style'),'position:fixed;z-index:9000');assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,0);
+});
+
+test('Samsung IME Done and Cancel release editable focus without cancelling native keyboard actions',()=>{
+ for(const code of [65376,65385])for(const tag of ['input','textarea','div']){
+  const f=fixture(),input=new f.El(tag);if(tag==='div')input.isContentEditable=true;
+  input.blur=()=>{if(f.doc.activeElement===input)f.doc.activeElement=f.doc.body;};input.focus();
+  assert.equal(f.key(39),false);assert.equal(f.key(code),false);assert.equal(f.doc.activeElement,f.doc.body);
+  f.doc.elementFromPoint=()=>null;assert.equal(f.key(39),true);
+ }
+});
+test('Back first leaves search, then opens and closes the complete bar without refocusing search',()=>{
+ const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();
+ assert.equal(f.key(10009),true);assert.equal(f.doc.activeElement,f.doc.body);assert.equal(barButtons(f).length,0);
+ f.key(10009);assert.equal(barButtons(f).length,6);f.key(10009);assert.equal(barButtons(f).length,0);assert.notEqual(f.doc.activeElement,input);
+ // Opening the bar directly from a focused field must not restore the keyboard on close.
+ input.focus();f.api.actions.main();f.api.actions.close();assert.notEqual(f.doc.activeElement,input);
+});
+test('search Enter allows native form submission before releasing focus and preserves composition',()=>{
+ const f=fixture(),timers=[],input=new f.El('input');f.win.setTimeout=fn=>{timers.push(fn);return timers.length;};input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();
+ f.events.keydown({keyCode:13,target:input,isComposing:true,preventDefault(){throw Error('Do not cancel composition');}});assert.equal(timers.length,0);assert.equal(f.doc.activeElement,input);
+ assert.equal(f.key(13),false);assert.equal(f.doc.activeElement,input);timers.shift()();assert.equal(f.doc.activeElement,f.doc.body);
+ input.focus();f.key(13);const newer=new f.El('input');newer.focus();timers.shift()();assert.equal(f.doc.activeElement,newer);
+});
+test('IME completion uses active input even when the keyboard targets body',()=>{
+ const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();assert.equal(f.key(65385,f.doc.body),false);assert.equal(f.doc.activeElement,f.doc.body);
+});
+test('the search shortcut selects the visible field and never focuses a hidden desktop copy',()=>{
+ const f=fixture(),hidden=new f.El('input'),shown=new f.El('input');hidden.getBoundingClientRect=()=>({width:0,height:0});shown.getBoundingClientRect=()=>({width:300,height:40});
+ f.doc.querySelectorAll=selector=>selector.indexOf('input[type=search]')===0?[hidden,shown]:[];
+ f.api.actions.main();f.api.actions.search();assert.equal(f.doc.activeElement,shown);assert.equal(barButtons(f).length,0);
+});
+test('a site autofocus cannot trap toolbar navigation inside its input',()=>{
+ const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};f.api.actions.main();input.focus();assert.equal(f.key(39),true);assert.ok(barButtons(f).includes(f.doc.activeElement));
+});
+
+test('Done returns OK to the series under the cursor, without treating Done as a click',()=>{
+ const f=fixture(),input=new f.El('input'),series=new f.El('a');let selected=0;input.blur=()=>{f.doc.activeElement=f.doc.body;};series.addEventListener('click',()=>{selected++;});series.setAttribute('href','https://www.animesaturn.net/anime/black-clover-67Dip');f.doc.elementFromPoint=()=>series;input.focus();
+ f.key(65376);assert.equal(selected,0);f.key(40);f.events.keyup({keyCode:40,preventDefault(){},stopImmediatePropagation(){}});f.key(13);assert.equal(selected,1);
+});
+test('Blue escapes text entry to the full bar and closing never opens the keyboard again',()=>{
+ const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();f.key(406);assert.equal(barButtons(f).length,6);assert.notEqual(f.doc.activeElement,input);f.key(10009);assert.notEqual(f.doc.activeElement,input);
+});
+
+test('stop cancels pending requestAnimationFrame to prevent cursor drift',t=>{
+ let now=1000,cancelled=[];t.mock.method(Date,'now',()=>now);const f=fixture();
+ f.doc.elementFromPoint=()=>null;f.win.requestAnimationFrame=fn=>{return 42;};f.win.cancelAnimationFrame=id=>{cancelled.push(id);};
+ f.key(39);f.events.blur({});assert.deepEqual(cancelled,[42]);
+});
+test('hit returns safe fallback when elementFromPoint is missing',()=>{
+ const f=fixture();delete f.doc.elementFromPoint;
+ // activate() calls hit() internally; it should not crash
+ assert.doesNotThrow(()=>{f.key(13);});
+});
+test('readJSON preserves falsy stored values like zero without falling back',()=>{
+ const f=fixture();f.storage.set('saturn-speed','350');
+ // Reinstall to read the stored speed
+ delete f.win.__saturnTV;const api2=install(f.win);
+ api2.actions.speed();// 350->500
+ assert.equal(JSON.parse(f.storage.get('saturn-speed')),500);
+ api2.actions.speed();// 500->700
+ assert.equal(JSON.parse(f.storage.get('saturn-speed')),700);
+});
+test('XHR ad blocking aborts without throwing an exception into caller code',()=>{
+ const f=fixture();let aborted=false,thrown=false;
+ f.win.XMLHttpRequest={prototype:{open:function(){},send:function(){}}};
+ // Reinstall to pick up XHR
+ delete f.win.__saturnTV;const api2=install(f.win);
+ const xhr=Object.create(f.win.XMLHttpRequest.prototype);
+ xhr.abort=()=>{aborted=true;};
+ xhr.__saturnURL='https://acscdn.com/evil.js';
+ try{f.win.XMLHttpRequest.prototype.send.call(xhr);}catch(e){thrown=true;}
+ assert.equal(aborted,true);assert.equal(thrown,false);
+});
+
+test('remote media keys forward toggleVideo to player iframe',()=>{
+ const f=fixture();const frame=new f.El('iframe');frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/123';
+ const sent=[];frame.contentWindow={postMessage(d,o){sent.push({data:d,origin:o});}};
+ f.doc.querySelector=s=>s==='iframe#watch-iframe'?frame:null;
+ f.key(415);// MediaPlay
+ assert.equal(sent.length,1);assert.equal(sent[0].data.type,'uiControl');assert.equal(sent[0].data.action,'toggleVideo');
+});
+test('originalControl falls back to video container when buttons are auto-hidden',()=>{
+ const f=fixture('play.saturncdn.net',true),received=[];
+ const videoContainer={tagName:'DIV',getBoundingClientRect(){return{left:0,top:0,width:1280,height:720};},dispatchEvent(e){received.push(e.type);}};
+ f.doc.querySelector=selector=>selector==='.jw-media'?videoContainer:null;
+ f.message({type:'uiControl',action:'toggleVideo'});
+ assert.ok(received.includes('click'));
+ assert.equal(f.sent.filter(m=>m.data.type==='controlResult'&&m.data.found).length,1);
+});
+test('pending UI controls are queued and flushed once player signals ready',()=>{
+ const f=fixture();const sent=[];
+ f.api.actions.toggleVideo();// Frame not ready yet
+ const frame=new f.El('iframe');frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/123';
+ frame.contentWindow={postMessage(d,o){sent.push({data:d,origin:o});}};
+ f.doc.querySelector=s=>s==='iframe#watch-iframe'?frame:null;
+ f.message({type:'ready'},'https://play.saturncdn.net',frame.contentWindow);
+ assert.ok(sent.some(m=>m.data.type==='uiControl'&&m.data.action==='toggleVideo'));
+});
+test('fullscreen state sync hides pointer and forwards OK and seek keys',()=>{
+ const f=fixture();const frame=new f.El('iframe');frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/123';
+ const sent=[];frame.contentWindow={postMessage(d,o){sent.push({data:d,origin:o});}};
+ f.doc.querySelector=s=>s==='iframe#watch-iframe'?frame:null;
+ f.message({type:'fullscreen',active:true},'https://play.saturncdn.net',frame.contentWindow);
+ const pointer=f.doc.body.children.find(e=>e.id==='saturn-pointer');
+ assert.equal(pointer.style.display,'none');
+ f.key(13);// OK in fullscreen triggers toggleVideo
+ assert.ok(sent.some(m=>m.data.type==='uiControl'&&m.data.action==='toggleVideo'));
+ f.key(39);// Right arrow forwards seek
+ assert.ok(sent.some(m=>m.data.type==='key'&&m.data.code===39));
 });

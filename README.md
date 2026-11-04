@@ -1,4 +1,4 @@
-# Saturn TV 0.9.1 — player originale del sito
+# Saturn TV 0.9.3 — player originale del sito
 
 Modulo TizenBrew per la Samsung UE50AU9070UXZT. Questa versione segue la richiesta
 di usare il lettore classico di AnimeSaturn. Play, pausa, timeline, sorgente video,
@@ -45,6 +45,22 @@ uno strumento di sviluppo separato.
 - Strumenti conserva Aggiorna, filtro ON/OFF, Nascondi overlay e ricordalo,
  Annulla rimozione, Stato lettore e Versione attiva. Indietro dai sottomenu torna
  alla barra principale. Preferiti e velocità usano le chiavi di memoria esistenti.
+
+### Ricerca e tastiera Samsung (0.9.2)
+
+- Fine/Ricerca Samsung (65376) e Annulla (65385) rilasciano il campo di testo.
+  Le frecce e OK tornano al cursore: si può selezionare una serie nei risultati.
+- Durante la scrittura, Indietro chiude prima il campo; la pressione successiva
+  apre la barra. Blu apre direttamente la barra. Chiuderla non riapre la tastiera.
+- Invio normale conserva l’invio del form del sito e rilascia il campo dopo
+  l’azione predefinita. L’Invio durante la composizione non interrompe la scrittura.
+- La scorciatoia Cerca sceglie il campo visibile; se la ricerca mobile è chiusa,
+  usa il pulsante Cerca originale del sito. Checkbox e slider non sono campi testo.
+
+La gestione dei codici IME e della rimozione del focus segue la
+[documentazione Samsung](https://developer.samsung.com/smarttv/develop/guides/user-interaction/keyboardime.html).
+Il banco `/search.html` simula i codici Samsung e consente di provare la sequenza
+ricerca → Fine → frecce → OK. Non emula la tastiera del firmware fisico.
 
 La precisione del singolo tocco e la curva di movimento sono controllate nei test.
 La cadenza e il frame rate del telecomando sul firmware Samsung richiedono il
@@ -100,7 +116,7 @@ L’audio del browser di prova è silenziato; non si dichiara verificato l’asc
 Anche le scorciatoie della barra 0.9.1 hanno avviato il video originale (readyState 4)
 e il suo fullscreen nel banco reale sul Mac. La verifica finale sulla Samsung resta necessaria.
 
-`saturn.js` e `saturn-0.9.1.js` sono identici. Le vecchie copie 0.6/0.7/0.8 sul ramo
+`saturn.js` e `saturn-0.9.3.js` sono identici. Le vecchie copie 0.6/0.7/0.8/0.9 sul ramo
 aggiornabile sono alias di compatibilità; i tag Git pubblicati restano immutati.
 L’esperimento 0.8.0 è archiviato e non è il player attivo. I file legacy sono
 conservati per consultazione e non rientrano nella suite corrente.

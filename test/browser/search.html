@@ -1,0 +1,13 @@
+<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV · ricerca Samsung</title>
+<style>body{background:#101820;color:#eef6ff;font:20px/1.5 sans-serif;margin:24px}input,button{font:inherit;padding:10px}#series{position:fixed;left:30%;top:45%;width:40%;height:10%;box-sizing:border-box;background:#1d3040;border:2px solid #8cdeff;color:white;display:flex;align-items:center;justify-content:center}#selection{position:fixed;top:60%;left:24px}#controls{position:fixed;top:75%;left:24px;right:24px}#hint{position:fixed;top:25%;left:24px;right:24px}#hidden{display:none}</style>
+<h1>Prova ricerca e telecomando</h1><header><input id="hidden" type="search" aria-label="Copia nascosta"><form action="https://www.animesaturn.net/filter" method="get"><input id="query" type="search" name="key" aria-label="Cerca un anime" autocomplete="off"></form></header>
+<p id="hint">Scrivi, premi Fine Samsung, poi usa frecce e OK per scegliere la serie.</p>
+<a id="series" href="https://www.animesaturn.net/anime/black-clover-67Dip">Black Clover</a><p id="selection" role="status">Nessuna serie selezionata</p>
+<div id="controls"><button data-test-action="search">Apri ricerca</button><button data-key="65376">Fine Samsung</button><button data-key="65385">Annulla Samsung</button><button data-key="10009">Indietro</button></div><script src="saturn-test.js"></script>
+<script>
+const query=document.getElementById('query'),status=document.getElementById('selection');
+document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();status.textContent='Ricerca inviata dal form del sito: '+query.value;});
+document.getElementById('series').addEventListener('click',e=>{e.preventDefault();status.textContent='Serie selezionata: Black Clover';});
+document.querySelector('[data-test-action=search]').onclick=()=>__saturnTV.actions.search();
+for(const button of document.querySelectorAll('[data-key]')){button.onmousedown=e=>e.preventDefault();button.onclick=()=>{const code=Number(button.dataset.key);(document.activeElement||document).dispatchEvent(new KeyboardEvent('keydown',{keyCode:code,bubbles:true,cancelable:true}));};}
+</script></html>
