@@ -44,7 +44,7 @@ test('dynamic ad resources are rejected without blocking the player iframe',()=>
 });
 test('Back restores the complete quick menu without a custom playback panel',()=>{
  const f=fixture();assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'||e.id==='saturn-cinema-controls'||e.id==='saturn-menu'));
- f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Play / Pausa','Schermo intero','Puntate','Cerca','Black Clover · 50','Altro']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
+ f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Play / Pausa','Schermo intero','Puntata prec.','Puntata succ.','Black Clover · 70','Altro']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
 });
 test('first OK inside the player forwards a pointer click before playback',()=>{
  const f=fixture('play.saturncdn.net',true);assert.equal(f.key(13),true);assert.equal(f.sent[0].data.type,'key');assert.equal(f.sent[0].data.code,13);
@@ -233,4 +233,31 @@ test('fullscreen state sync hides pointer and forwards OK and seek keys',()=>{
  assert.ok(sent.some(m=>m.data.type==='uiControl'&&m.data.action==='toggleVideo'));
  f.key(39);// Right arrow forwards seek
  assert.ok(sent.some(m=>m.data.type==='key'&&m.data.code===39));
+});
+
+test('vidstack player is preferred by default on animesaturn',()=>{
+ const f=fixture();
+ assert.equal(f.win.localStorage.getItem('watch:player'),'vidstack');
+});
+test('blackClover70 navigates to episode 70',()=>{
+ const f=fixture();f.api.actions.blackClover70();
+ assert.ok(f.changes.some(c=>c[0]==='navigate'&&c[1]==='https://www.animesaturn.net/anime/black-clover-67Dip/ep-70'));
+});
+test('local video controls operate without cross-origin iframe',()=>{
+ const f=fixture();let played=0,paused=0;
+ const video=new f.El('video');video.paused=true;video.play=()=>{played++;video.paused=false;};video.pause=()=>{paused++;video.paused=true;};
+ f.doc.querySelector=s=>s==='video'?video:null;
+ f.api.actions.toggleVideo();
+ assert.equal(played,1);
+ f.api.actions.toggleVideo();
+ assert.equal(paused,1);
+});
+test('exitNative restores pointer display after fullscreen exit',()=>{
+ const f=fixture();
+ const pointer=f.doc.body.children.find(e=>e.id==='saturn-pointer');
+ pointer.style.display='none';
+ f.doc.fullscreenElement={};
+ f.doc.exitFullscreen=()=>{f.doc.fullscreenElement=null;};
+ f.key(10009);// Back in fullscreen exits
+ assert.equal(f.doc.fullscreenElement,null);
 });

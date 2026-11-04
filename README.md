@@ -1,9 +1,10 @@
-# Saturn TV 0.9.3 — player originale del sito
+# Saturn TV 0.9.4 — player originale del sito
 
-Modulo TizenBrew per la Samsung UE50AU9070UXZT. Questa versione segue la richiesta
-di usare il lettore classico di AnimeSaturn. Play, pausa, timeline, sorgente video,
-impostazioni e fullscreen sono quelli del sito. Il modulo non chiama le API JW,
-non crea video alternativi, non cambia src/controls e non aggiunge transport bar.
+Modulo TizenBrew per la Samsung UE50AU9070UXZT. Questa versione integra il supporto
+al player HTML5 Vidstack (selezionato automaticamente per evitare blocchi e lag dello
+schermo nero su Tizen), controlli rapidi per episodio successivo e precedente richiamabili
+con il tasto Indietro, puntata di riferimento Black Clover 70 e ripristino istantaneo
+della freccia del cursore dopo l'uscita da schermo intero.
 
 ## Installazione e aggiornamenti
 
