@@ -1,3 +1,17 @@
+# Novità 0.9.7 — gestione degli annunci
+
+- Se si apre una pagina esterna ancora controllata da TizenBrew, **Indietro**
+  o **Torna a Saturn TV** riaprono la home del sito. Se la TV apre un'altra app
+  o una finestra separata, usa **Home** sul telecomando e riapri TizenBrew.
+- **Indietro → Nascondi annuncio** rimuove un riquadro sovrapposto separabile.
+  Il pulsante diventa **Annulla rimozione**. Le regole riconoscibili vengono
+  ricordate sul dispositivo. Lettore, moduli di ricerca e finestre di dialogo
+  sono esclusi dalla selezione.
+- Il modulo controlla `ad-domains.json` all'apertura della pagina, al massimo
+  una volta all'ora. Accetta solo domini, mantiene la lista integrata e riusa
+  l'ultima copia valida se il download fallisce. Per estenderla, aggiorna quel
+  file su `main`, senza cambiare il tag o il modulo installato sulla TV.
+
 # Correzione 0.9.6 — annunci e rientro
 
 - Aggiunti aqle3.com e sootoarathus.net al filtro: il primo loader è stato

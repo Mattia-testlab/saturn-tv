@@ -1,4 +1,4 @@
-<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV 0.9.3 · verifiche</title>
+<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV 0.9.7 · verifiche</title>
 <style>body{background:#101820;color:#eef6ff;font:20px sans-serif}li{padding:6px}button,input{font:inherit;padding:10px}</style>
 <h1>Collaudo del modulo classico</h1><input type="search" aria-label="Ricerca di prova"><ul id="results"></ul><script src="saturn-test.js"></script>
 <script>
@@ -6,12 +6,14 @@
  const api=window.__saturnTV,results=document.getElementById('results'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
  function check(text,ok){let li=document.createElement('li');li.textContent=(ok?'PASS — ':'FAIL — ')+text;results.appendChild(li);}
  function key(code,type='keydown'){(document.activeElement||document).dispatchEvent(new KeyboardEvent(type,{keyCode:code,bubbles:true,cancelable:true}));}
- check('Versione 0.9.2',api.version==='0.9.2');check('Nessun lettore o barra di riproduzione aggiunti',!document.querySelector('video,#saturn-cinema-controls,#saturn-native-video,#saturn-menu'));
- key(10009);check('Indietro apre la barra completa',document.querySelectorAll('#saturn-toolbar button').length===6);check('Scorciatoie Play e fullscreen presenti',document.querySelector('[data-saturn-action=toggleVideo]')&&document.querySelector('[data-saturn-action=fullscreen]'));
+ check('Versione 0.9.7',api.version==='0.9.7');check('Nessun lettore o barra di riproduzione aggiunti',!document.querySelector('video,#saturn-cinema-controls,#saturn-native-video,#saturn-menu'));
+ key(10009);check('Indietro apre la barra completa',document.querySelectorAll('#saturn-toolbar button').length===7);check('Scorciatoie Play e fullscreen presenti',document.querySelector('[data-saturn-action=toggleVideo]')&&document.querySelector('[data-saturn-action=fullscreen]'));
+ const overlay=document.createElement('div');overlay.id='annuncio-di-prova';overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:5000';document.body.appendChild(overlay);
+ const hide=document.querySelector('[data-saturn-action=adShortcut]');hide.click();check('Nascondi annuncio libera la pagina',overlay.style.display==='none'&&hide.textContent==='Annulla rimozione');hide.click();check('Annulla ripristina il riquadro',overlay.style.display!== 'none'&&hide.textContent==='Nascondi annuncio');overlay.remove();
  document.querySelector('[data-saturn-action=settings]').click();check('Preferiti e Riprendi ripristinati',document.querySelector('[data-saturn-action=favorites]')&&document.querySelector('[data-saturn-action=resume]'));
  document.querySelector('[data-saturn-action=tools]').click();check('Strumenti e annulla overlay ripristinati',document.querySelector('[data-saturn-action=undoOverlay]')&&document.querySelector('[data-saturn-action=reload]'));key(10009);check('Indietro dal sottomenu torna alla barra',document.querySelector('#saturn-toolbar').getAttribute('data-view')==='main');
  let focus=document.activeElement;key(39);check('Frecce selezionano i pulsanti della barra',document.activeElement!==focus);
- document.querySelector('[data-saturn-action=search]').click();check('Cerca dà il focus al campo del sito',document.activeElement===document.querySelector('input'));
+ document.querySelector('[data-saturn-action=settings]').click();document.querySelector('[data-saturn-action=search]').click();check('Cerca dà il focus al campo del sito',document.activeElement===document.querySelector('input'));
  key(65376);check('Fine Samsung rilascia la ricerca',document.activeElement!==document.querySelector('input'));
  document.querySelector('input').focus();key(65385);check('Annulla Samsung rilascia la ricerca',document.activeElement!==document.querySelector('input'));
  document.querySelector('input').focus();key(10009);check('Indietro esce dalla ricerca senza aprire la barra',document.activeElement!==document.querySelector('input')&&!document.getElementById('saturn-toolbar'));

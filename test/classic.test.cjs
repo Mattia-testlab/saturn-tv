@@ -1,8 +1,8 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {install,hostBlocked}=require('../saturn.js');
-function fixture(host='www.animesaturn.net',child=false){
- const events={},docEvents={},sent=[],changes=[],storage=new Map();let doc;
+function fixture(host='www.animesaturn.net',child=false,options={}){
+ const events={},docEvents={},sent=[],changes=[],storage=new Map(options.storage);let doc;
  class El{
   constructor(tag){this.tagName=tag.toUpperCase();this.children=[];this.attrs={};this.style={};this.handlers={};this.nodeType=1;}
   appendChild(n){this.children.push(n);n.parentNode=this;return n;}insertBefore(n){return this.appendChild(n);}removeChild(n){this.children=this.children.filter(x=>x!==n);n.parentNode=null;}
@@ -13,7 +13,7 @@ function fixture(host='www.animesaturn.net',child=false){
  doc={body:new El('body'),documentElement:{},activeElement:null,createElement(tag){changes.push(['create',tag]);return new El(tag);},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(k,f){docEvents[k]=f;}};
  const parent={postMessage(data,origin){sent.push({data,origin});}};
  const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+'/',assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
- win.top=child?{}:win;win.parent=parent;
+ win.top=child?{}:win;win.parent=parent;if(options.fetch)win.fetch=options.fetch;
  const api=install(win);sent.length=0;
  function key(code,target){let stopped=false;events.keydown({keyCode:code,target:target||doc.activeElement,preventDefault(){stopped=true;},stopImmediatePropagation(){}});return stopped;}
  function message(data,origin='https://www.animesaturn.net',source=parent){events.message({data:{saturnTV:1,...data},origin,source});}
@@ -44,7 +44,7 @@ test('dynamic ad resources are rejected without blocking the player iframe',()=>
 });
 test('Back restores the complete quick menu without a custom playback panel',()=>{
  const f=fixture();assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'||e.id==='saturn-cinema-controls'||e.id==='saturn-menu'));
- f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Play / Pausa','Schermo intero','Puntata prec.','Puntata succ.','Black Clover · 70','Altro']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
+ f.key(10009);const bar=f.doc.body.children.find(e=>e.id==='saturn-toolbar');assert.ok(bar);const labels=bar.children.filter(e=>e.tagName==='BUTTON').map(e=>e.textContent);assert.deepEqual(labels,['Play / Pausa','Schermo intero','Puntata prec.','Puntata succ.','Black Clover · 70','Altro','Nascondi annuncio']);f.key(10009);assert.ok(!f.doc.body.children.some(e=>e.id==='saturn-toolbar'));
 });
 test('first OK inside the player forwards a pointer click before playback',()=>{
  const f=fixture('play.saturncdn.net',true);assert.equal(f.key(13),true);assert.equal(f.sent[0].data.type,'key');assert.equal(f.sent[0].data.code,13);
@@ -122,8 +122,8 @@ test('overlay hiding and undo protect every element inside the original player',
  for(const el of [legitimate,ad]){el.getBoundingClientRect=()=>({width:1200,height:700});el.style.setProperty=(name,value)=>{el.style[name]=value;};}
  f.win.getComputedStyle=el=>({position:'fixed',display:el.style.display||'block',visibility:'visible',opacity:'1',pointerEvents:'auto',zIndex:el===legitimate?'999999':'9000'});
  f.doc.querySelectorAll=selector=>selector==='div,section,aside,iframe,dialog'?[legitimate,ad]:[];
- f.api.actions.overlay();assert.equal(ad.style.display,'none');assert.equal(legitimate.style.display,undefined);assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,1);
- f.api.actions.undoOverlay();assert.equal(ad.getAttribute('style'),'position:fixed;z-index:9000');assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,0);
+ f.api.actions.main();const shortcut=barButtons(f).find(b=>b.getAttribute('data-saturn-action')==='adShortcut');assert.equal(shortcut.textContent,'Nascondi annuncio');shortcut.click();assert.equal(shortcut.textContent,'Annulla rimozione');assert.equal(ad.style.display,'none');assert.equal(legitimate.style.display,undefined);assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,1);
+ shortcut.click();assert.equal(shortcut.textContent,'Nascondi annuncio');assert.equal(ad.getAttribute('style'),'position:fixed;z-index:9000');assert.equal(JSON.parse(f.storage.get('saturn-overlay-rules')).length,0);
 });
 
 test('Samsung IME Done and Cancel release editable focus without cancelling native keyboard actions',()=>{
@@ -137,7 +137,7 @@ test('Samsung IME Done and Cancel release editable focus without cancelling nati
 test('Back first leaves search, then opens and closes the complete bar without refocusing search',()=>{
  const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();
  assert.equal(f.key(10009),true);assert.equal(f.doc.activeElement,f.doc.body);assert.equal(barButtons(f).length,0);
- f.key(10009);assert.equal(barButtons(f).length,6);f.key(10009);assert.equal(barButtons(f).length,0);assert.notEqual(f.doc.activeElement,input);
+ f.key(10009);assert.equal(barButtons(f).length,7);f.key(10009);assert.equal(barButtons(f).length,0);assert.notEqual(f.doc.activeElement,input);
  // Opening the bar directly from a focused field must not restore the keyboard on close.
  input.focus();f.api.actions.main();f.api.actions.close();assert.notEqual(f.doc.activeElement,input);
 });
@@ -164,7 +164,7 @@ test('Done returns OK to the series under the cursor, without treating Done as a
  f.key(65376);assert.equal(selected,0);f.key(40);f.events.keyup({keyCode:40,preventDefault(){},stopImmediatePropagation(){}});f.key(13);assert.equal(selected,1);
 });
 test('Blue escapes text entry to the full bar and closing never opens the keyboard again',()=>{
- const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();f.key(406);assert.equal(barButtons(f).length,6);assert.notEqual(f.doc.activeElement,input);f.key(10009);assert.notEqual(f.doc.activeElement,input);
+ const f=fixture(),input=new f.El('input');input.blur=()=>{f.doc.activeElement=f.doc.body;};input.focus();f.key(406);assert.equal(barButtons(f).length,7);assert.notEqual(f.doc.activeElement,input);f.key(10009);assert.notEqual(f.doc.activeElement,input);
 });
 
 test('stop cancels pending requestAnimationFrame to prevent cursor drift',t=>{
@@ -272,12 +272,12 @@ test('repeated Play while loading runs once, and old or other-page commands expi
   assert.equal(sent.filter(d=>d.type==='uiControl').length,scenario==='duplicate'?1:0);
  }
 });
-test('favorite details open, pin to the six-button bar, remove and undo without losing other entries',()=>{
+test('favorite details open, pin to the main bar, remove and undo without losing other entries',()=>{
  const f=fixture(),a={url:'https://www.animesaturn.net/anime/a/ep-5',title:'Serie A'},b={url:'https://www.animesaturn.net/anime/b',title:'Serie B'};
  f.storage.set('saturn-favorites',JSON.stringify([a,b,null]));f.api.actions.favorites();f.api.actions.favorite0();
  assert.deepEqual(barButtons(f).map(b=>b.textContent),['Torna ai preferiti','Apri','Mostra nella barra','Rimuovi dai preferiti']);
  f.api.actions.openFavorite();assert.deepEqual(f.changes.at(-1),['navigate',a.url]);
- f.api.actions.pinFavorite();assert.equal(barButtons(f).length,6);assert.ok(barButtons(f).some(b=>b.textContent==='Serie A'));f.api.actions.openShortcut();assert.deepEqual(f.changes.at(-1),['navigate',a.url]);
+ f.api.actions.pinFavorite();assert.equal(barButtons(f).length,7);assert.ok(barButtons(f).some(b=>b.textContent==='Serie A'));f.api.actions.openShortcut();assert.deepEqual(f.changes.at(-1),['navigate',a.url]);
  f.api.actions.favorites();f.api.actions.favorite0();f.key(10009);assert.ok(barButtons(f).some(b=>b.textContent==='Aggiungi questa pagina'));
  f.api.actions.favorite0();f.api.actions.removeFavorite();assert.deepEqual(JSON.parse(f.storage.get('saturn-favorites')),[b]);assert.ok(barButtons(f).some(b=>b.textContent==='Annulla rimozione'));
  f.api.actions.restoreFavorite();assert.deepEqual(JSON.parse(f.storage.get('saturn-favorites')),[a,b]);
@@ -298,4 +298,37 @@ test('toolbar pointer events cannot propagate to advertising handlers and its ac
 test('Amazon escape screen returns to the site with Back, without enabling the full module there',()=>{
  const f=fixture('www.amazon.it');assert.equal(f.api.recovery,true);let dest;f.win.location.replace=url=>{dest=url;};assert.ok(f.doc.body.children.some(e=>e.id==='saturn-recovery'));f.key(10009);assert.equal(dest,'https://www.animesaturn.net/');assert.equal(f.api.actions,undefined);
  const child=fixture('www.amazon.it',true);assert.equal(child.api,null);
+});
+
+test('recovery handles a new redirect domain and leaves the local launcher and ordinary Enter alone',()=>{
+ const f=fixture('shop-redirect.com');assert.equal(f.api.recovery,true);
+ const input=new f.El('input');input.focus();assert.equal(f.key(13),false);
+ let dest;f.win.location.replace=url=>{dest=url;};f.events.keydown({key:'BrowserBack',preventDefault(){},stopImmediatePropagation(){}});
+ assert.equal(dest,'https://www.animesaturn.net/');
+ for(const host of ['127.0.0.1','localhost','tv.local'])assert.equal(fixture(host).api,null);
+ assert.equal(fixture('shop-redirect.com',true).api,null);
+});
+test('downloaded ad rules extend the filter and a failed refresh keeps the last valid copy',async()=>{
+ const key='saturn-ad-domains-v1',listUrl='https://raw.githubusercontent.com/Mattia-testlab/saturn-tv/main/ad-domains.json';
+ const request=(input,options)=>{
+  if(input!==listUrl)return Promise.resolve('allowed');
+  assert.equal(options.credentials,'omit');assert.equal(options.referrerPolicy,'no-referrer');
+  return Promise.resolve({ok:true,text:()=>Promise.resolve('{"schema":1,"domains":["new-ad.com"]}')});
+ };
+ const f=fixture(undefined,false,{fetch:request});await new Promise(setImmediate);
+ assert.equal(f.storage.get(key),'["new-ad.com"]');
+ for(const href of ['https://cdn.new-ad.com/ad.js','https://aqle3.com/btag.min.js'])await assert.rejects(f.win.fetch(href),/pubblicitaria/);
+ assert.equal(await f.win.fetch('https://new-ad.com.fake.net/video'),'allowed');
+ for(const fail of [()=>Promise.reject(new Error('offline')),()=>Promise.resolve({ok:true,text:()=>Promise.resolve('{"schema":1,"domains":["saturncdn.net"]}')})]){
+  const cached=fixture(undefined,false,{storage:[[key,f.storage.get(key)]],fetch:(url)=>url===listUrl?fail():Promise.resolve('allowed')});
+  await new Promise(setImmediate);assert.equal(cached.storage.get(key),'["new-ad.com"]');
+  await assert.rejects(cached.win.fetch('https://new-ad.com/ad.js'),/pubblicitaria/);
+  assert.equal(await cached.win.fetch('https://play.saturncdn.net/player.js'),'allowed');
+ }
+});
+test('player uses validated ad domains only from the trusted parent',async()=>{
+ const f=fixture('play.saturncdn.net',true);
+ f.message({type:'settings',adDomains:['other-ad.net']},'https://fake.net');assert.equal(await f.win.fetch('https://other-ad.net/tag.js'),'ok');
+ f.message({type:'settings',adDomains:['other-ad.net']});await assert.rejects(f.win.fetch('https://other-ad.net/tag.js'),/pubblicitaria/);
+ f.message({type:'settings',adDomains:['*.saturncdn.net']});assert.equal(await f.win.fetch('https://play.saturncdn.net/player.js'),'ok');
 });
