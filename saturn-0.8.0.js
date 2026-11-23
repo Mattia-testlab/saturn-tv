@@ -1,7 +1,7 @@
-/* Saturn TV 0.9.11 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.12 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.11';
+  var version='0.9.12';
   var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com','aqle3.com','sootoarathus.net'];
   var rulesUrl = 'https://raw.githubusercontent.com/Mattia-testlab/saturn-tv/main/ad-domains.json';
   var rulesKey = 'saturn-ad-domains-v1';
@@ -165,16 +165,31 @@
       if (!api.enabled || !el || !/^(SCRIPT|IFRAME)$/.test(el.tagName)) return false;
       return blocked(el.getAttribute('src') || '') || ((episodePage || player) && foreignFrame(el));
     }
-    if(win.Node){['appendChild','insertBefore'].forEach(function(name){var original=win.Node.prototype[name];if(!original)return;win.Node.prototype[name]=function(el){if(adResource(el)){api.resources++;return el;}return original.apply(this,arguments);};});}
+    if(win.Node){['appendChild','insertBefore'].forEach(function(name){var original=win.Node.prototype[name];if(!original)return;win.Node.prototype[name]=function(el){if(adResource(el)){api.resources++;return el;}protectPlayerFrame(el,false);return original.apply(this,arguments);};});}
     if(win.fetch){var fetch=win.fetch;win.fetch=function(input){if(blocked(input&&input.url?input.url:input)){api.resources++;return win.Promise.reject(new Error('Risorsa pubblicitaria bloccata'));}return fetch.apply(win,arguments);};}
     if(win.XMLHttpRequest){var xp=win.XMLHttpRequest.prototype,xopen=xp.open,xsend=xp.send;xp.open=function(method,url){this.__saturnURL=url;return xopen.apply(this,arguments);};xp.send=function(){if(blocked(this.__saturnURL)){api.resources++;this.abort();return;}return xsend.apply(this,arguments);};}
+    var playerSandbox = 'allow-scripts allow-same-origin allow-presentation';
+    function protectPlayerFrame(frame, reload) {
+      if (!frame || frame.tagName !== 'IFRAME' || !top || !api.enabled || !trustedFrame(frame)) return;
+      var current = frame.getAttribute('sandbox');
+      var permissions = frame.hasAttribute('sandbox') ? (current || '').split(/\s+/).filter(function(permission) {
+        return permission && !/^(allow-popups(?:-to-escape-sandbox)?|allow-top-navigation(?:-.*)?)$/i.test(permission);
+      }).join(' ') : playerSandbox;
+      if ((current || '') === permissions && frame.hasAttribute('sandbox')) return;
+      frame.setAttribute('sandbox', permissions);
+      // Permissions for a document that already loaded change on its next navigation.
+      if (reload) frame.setAttribute('src', frame.getAttribute('src') || frame.src);
+    }
     function scan(scope){
       if(!scope||!scope.querySelectorAll||own(scope))return;
-      var nodes=Array.prototype.slice.call(scope.querySelectorAll('script[src],iframe[src],[data-ad-unit],#dl-banner-728x90'));
+      var nodes=Array.prototype.slice.call(scope.querySelectorAll('script[src],iframe[src],[data-ad-unit],#dl-banner-728x90,#dontfoid'));
       if(scope.tagName)nodes.unshift(scope);
       nodes.forEach(function(el){
+        if(el.tagName==='IFRAME')protectPlayerFrame(el,true);
         if(!api.enabled||!el.parentNode||own(el))return;
-        var explicit=el.hasAttribute&&el.hasAttribute('data-ad-unit')||el.id==='dl-banner-728x90';
+        var playerClickCover = player && el.id === 'dontfoid' && el.tagName === 'DIV' &&
+          el.style && el.style.position === 'fixed' && el.style.zIndex === '2147483647';
+        var explicit=playerClickCover||el.hasAttribute&&el.hasAttribute('data-ad-unit')||el.id==='dl-banner-728x90';
         if(!adResource(el)&&!explicit)return;
         if(el.querySelector&&el.querySelector('video,audio,#watch-iframe,#jw-player,media-player'))return;
         el.parentNode.removeChild(el);api.resources++;
@@ -182,7 +197,7 @@
       scanEmptyClickCovers(scope);
       scanOverlays(scope);
     }
-    if(win.MutationObserver)new win.MutationObserver(function(records){records.forEach(function(record){if(record.type==='attributes'){if(record.attributeName==='src')scan(record.target);else scanEmptyClickCovers(record.target);}else Array.prototype.forEach.call(record.addedNodes||[],function(n){if(n.nodeType===1)scan(n);});});}).observe(doc,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style']});
+    if(win.MutationObserver)new win.MutationObserver(function(records){records.forEach(function(record){if(record.type==='attributes'){if(record.attributeName==='src'||(player&&record.target.id==='dontfoid'))scan(record.target);else scanEmptyClickCovers(record.target);}else Array.prototype.forEach.call(record.addedNodes||[],function(n){if(n.nodeType===1)scan(n);});});}).observe(doc,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style']});
 
     function ensureVidstack(){
       if(!top||!siteHost(host))return;

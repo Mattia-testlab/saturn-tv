@@ -1,3 +1,7 @@
+# Correzione 0.9.12 — Play nel lettore originale
+
+Il filtro rimuove il riquadro trasparente che intercetta Play anche dentro il lettore. Il browser isola il lettore incorporato, permettendogli di eseguire il suo codice e riprodurre il video, e applica restrizioni sulle nuove finestre e sulla navigazione della pagina principale.
+
 # Correzione 0.9.11 — selezione puntata
 
 Quando il filtro è attivo, sulle pagine delle puntate rimuove il livello trasparente a tutta pagina che intercetta i clic pubblicitari, anche se era già presente quando TizenBrew ha caricato il modulo.

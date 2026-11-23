@@ -417,3 +417,23 @@ test('late blocking removes the empty root click cover while preserving page UI'
  assert.equal(dialog.parentNode,f.doc.body);
  assert.equal(content.parentNode,f.doc.body);
 });
+
+test('the original player stays mounted when its known click cover appears',()=>{
+ let observe;
+ const f=fixture('play.saturncdn.net',true,{observer:class { constructor(callback){observe=callback;} observe(){} }});
+ const cover=new f.El('div'),video=new f.El('video');
+ cover.id='dontfoid';cover.style={position:'fixed',zIndex:'2147483647'};
+ f.doc.body.appendChild(cover);f.doc.body.appendChild(video);
+ observe([{type:'childList',addedNodes:[cover,video]}]);
+ assert.equal(cover.parentNode,null);
+ assert.equal(video.parentNode,f.doc.body);
+});
+
+test('player iframe supports playback without permission to open windows or navigate the TV page',()=>{
+ const f=fixture(),frame=new f.El('iframe');
+ frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/71';
+ frame.setAttribute('allowfullscreen','');
+ f.doc.body.appendChild(frame);
+ assert.equal(frame.getAttribute('sandbox'),'allow-scripts allow-same-origin allow-presentation');
+ assert.equal(frame.hasAttribute('allowfullscreen'),true);
+});
