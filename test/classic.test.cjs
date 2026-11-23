@@ -332,3 +332,34 @@ test('player uses validated ad domains only from the trusted parent',async()=>{
  f.message({type:'settings',adDomains:['other-ad.net']});await assert.rejects(f.win.fetch('https://other-ad.net/tag.js'),/pubblicitaria/);
  f.message({type:'settings',adDomains:['*.saturncdn.net']});assert.equal(await f.win.fetch('https://play.saturncdn.net/player.js'),'ok');
 });
+
+test('changing episode uses canonical watch links directly, without triggering site click handlers',()=>{
+ const f=fixture(),anchor=new f.El('a'),button=new f.El('button');let siteClicks=0;
+ f.win.location.href='https://www.animesaturn.net/anime/black-clover-67Dip/ep-70';
+ const watch=new f.El('div');watch.setAttribute('x-data','watchPage('+JSON.stringify({currentUrl:'/anime/black-clover-FvRae/ep-70',next:'/anime/black-clover-FvRae/ep-71',prev:'https://outside.invalid/anime/black-clover-FvRae/ep-69'})+')');
+ anchor.setAttribute('href','/anime/black-clover-FvRae/ep-74');anchor.addEventListener('click',()=>siteClicks++);
+ button.setAttribute('title','Episodio successivo (L)');button.addEventListener('click',()=>siteClicks++);
+ f.doc.querySelector=selector=>selector.startsWith('[x-data^=')?watch:null;
+ f.api.actions.nextEpisode();f.api.actions.previousEpisode();
+ f.doc.elementFromPoint=()=>anchor;f.key(13);
+ f.doc.elementFromPoint=()=>button;f.key(13);
+ assert.equal(siteClicks,0);
+ assert.deepEqual(f.changes.filter(row=>row[0]==='navigate').map(row=>row[1]),[71,74,71].map(n=>'https://www.animesaturn.net/anime/black-clover-FvRae/ep-'+n));
+});
+test('Back requests an explicit iframe fullscreen exit and remains usable after iframe replacement',()=>{
+ const f=fixture(),sent=[],frame=new f.El('iframe');frame.id='watch-iframe';frame.src='https://play.saturncdn.net/embed/123';frame.contentWindow={postMessage(data){sent.push(data);}};
+ f.doc.querySelector=selector=>selector==='iframe#watch-iframe'?frame:null;
+ f.message({type:'fullscreen',active:true},'https://play.saturncdn.net',frame.contentWindow);
+ assert.equal(f.key(10009),true);assert.deepEqual(sent.map(d=>d.type),['exitFullscreen']);
+ f.message({type:'fullscreen',active:true},'https://play.saturncdn.net',frame.contentWindow);
+ frame.contentWindow={postMessage(data){sent.push(data);}};
+ assert.equal(f.key(10009),true);assert.ok(barButtons(f).some(b=>b.textContent==='Nascondi annuncio'));
+});
+test('foreign fullscreen overlay iframe loses focus to the reachable ad control',()=>{
+ const f=fixture(),frame=new f.El('iframe');frame.setAttribute('src','https://unknown-ad.com/view');
+ frame.getBoundingClientRect=()=>({width:1280,height:720});
+ f.win.getComputedStyle=()=>({position:'fixed',display:'block',visibility:'visible',opacity:'1',pointerEvents:'auto'});
+ frame.focus();f.docEvents.load({target:frame});
+ assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'adShortcut');
+ f.key(10009);assert.notEqual(f.doc.activeElement,frame);f.key(10009);assert.ok(barButtons(f).length);
+});

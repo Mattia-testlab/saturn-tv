@@ -1,3 +1,15 @@
+# Correzione 0.9.8 — cambio puntata e annunci a schermo intero
+
+- Il telecomando segue gli indirizzi delle puntate pubblicati dal sito, anche
+  quando la pagina è stata aperta da un vecchio collegamento. Il cambio non
+  invia un clic simulato ai gestori pubblicitari della pagina.
+- Se un iframe esterno sovrapposto cattura il focus, il modulo riporta il
+  telecomando su **Nascondi annuncio**. Video, iframe del player e dialoghi
+  protetti restano fuori dalla selezione.
+- Indietro invia al player incorporato un comando esplicito di uscita dal
+  fullscreen. Dopo il cambio di iframe, un vecchio stato fullscreen non
+  impedisce l'apertura della barra.
+
 # Novità 0.9.7 — gestione degli annunci
 
 - Se si apre una pagina esterna ancora controllata da TizenBrew, **Indietro**

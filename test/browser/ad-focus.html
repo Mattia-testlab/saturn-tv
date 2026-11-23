@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="it"><meta charset="utf-8"><title>Saturn TV · prova annuncio a schermo intero</title>
+<style>body{background:#101820;color:#eef6ff;font:22px sans-serif;padding:24px}button{font:inherit;padding:10px}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:9999}</style>
+<h1>Prova annuncio a schermo intero</h1>
+<p>Il riquadro simulato usa un'origine diversa e prova a prendere i comandi.</p>
+<button type="button" id="start">Simula annuncio</button>
+<script src="saturn-test.js"></script>
+<script>
+  document.getElementById('start').onclick=function(){
+    const frame=document.createElement('iframe');
+    frame.id='ad-test-frame';frame.title='Annuncio simulato';frame.src='http://localhost:8766/player.html';
+    frame.addEventListener('load',()=>frame.focus(),{once:true});
+    document.body.appendChild(frame);
+  };
+</script></html>
