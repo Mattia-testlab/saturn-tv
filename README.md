@@ -1,3 +1,16 @@
+# Correzione 0.9.6 — annunci e rientro
+
+- Aggiunti aqle3.com e sootoarathus.net al filtro: il primo loader è stato
+  osservato nella pagina della puntata e carica il secondo dominio.
+- I pulsanti della barra intercettano anche pointerdown/up e mousedown/up;
+  il clic esegue una sola azione e non prosegue verso altri listener successivi.
+- Sulle pagine Amazon riconosciute e sui domini pubblicitari bloccati, quando
+  TizenBrew inietta ancora il modulo nella pagina principale, compare un pulsante
+  per tornare al sito. Indietro e OK eseguono lo stesso rientro.
+- Non garantisce il recupero di finestre separate non controllate da TizenBrew,
+  né blocca retroattivamente script già eseguiti prima dell’iniezione.
+- Verificati 50 test automatici; il percorso esatto sulla TV resta da collaudare.
+
 # Novità 0.9.5
 
 - Preferiti: seleziona una voce per aprirla, mostrarla nella barra o rimuoverla.

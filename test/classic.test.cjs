@@ -286,3 +286,16 @@ test('invalid shortcuts fall back safely and adding favorites tolerates malforme
  const f=fixture();f.storage.set('saturn-shortcut',JSON.stringify({url:'javascript:alert(1)',title:'Invalid'}));f.api.actions.openShortcut();assert.deepEqual(f.changes.at(-1),['navigate','https://www.animesaturn.net/anime/black-clover-67Dip/ep-70']);
  f.storage.set('saturn-favorites',JSON.stringify([null,{url:'javascript:alert(1)'}]));f.api.actions.addFavorite();assert.equal(JSON.parse(f.storage.get('saturn-favorites')).length,1);
 });
+
+test('new observed ad loader is blocked while official player resources pass',()=>{
+ const f=fixture(),container=new f.El('div');for(const url of ['https://aqle3.com/btag.min.js','https://sootoarathus.net/ad.js']){const s=new f.El('script');s.setAttribute('src',url);container.appendChild(s);}assert.equal(container.children.length,0);assert.equal(hostBlocked('aqle3.com.evil.test'),false);
+});
+test('toolbar pointer events cannot propagate to advertising handlers and its action runs once',()=>{
+ const f=fixture();f.api.actions.main();const button=barButtons(f).find(b=>b.getAttribute('data-saturn-action')==='openShortcut');let stopped=0;
+ for(const type of ['pointerdown','pointerup','mousedown','mouseup','click'])f.events[type]({type,target:button,preventDefault(){},stopImmediatePropagation(){stopped++;}});
+ assert.equal(stopped,5);assert.equal(f.changes.filter(c=>c[0]==='navigate').length,1);
+});
+test('Amazon escape screen returns to the site with Back, without enabling the full module there',()=>{
+ const f=fixture('www.amazon.it');assert.equal(f.api.recovery,true);let dest;f.win.location.replace=url=>{dest=url;};assert.ok(f.doc.body.children.some(e=>e.id==='saturn-recovery'));f.key(10009);assert.equal(dest,'https://www.animesaturn.net/');assert.equal(f.api.actions,undefined);
+ const child=fixture('www.amazon.it',true);assert.equal(child.api,null);
+});

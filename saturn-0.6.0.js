@@ -1,13 +1,21 @@
-/* Saturn TV 0.9.5 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.6 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.5';
-  var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com'];
+  var version='0.9.6';
+  var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com','aqle3.com','sootoarathus.net'];
   function hostBlocked(host){host=String(host||'').toLowerCase().replace(/\.$/,'');return adHosts.some(function(h){return host===h||host.slice(-h.length-1)==='.'+h;});}
   function siteHost(host){return /^(www\.)?animesaturn\.net$/.test(String(host).toLowerCase());}
   function install(win){
     var host = win.location.hostname.toLowerCase();
-    if(!siteHost(host)&&host!=='play.saturncdn.net')return null;
+    if(!siteHost(host)&&host!=='play.saturncdn.net'){
+      if(win!==win.top||!win.document||!(/(^|\.)amazon\.(it|com|de|fr|es|co\.uk)$/.test(host)||hostBlocked(host)))return null;
+      if(win.__saturnTV)return win.__saturnTV;
+      var recovery={version:version,recovery:true};win.__saturnTV=recovery;
+      function returnToSite(){win.location.replace('https://www.animesaturn.net/');}
+      function recoveryButton(){if(!win.document.body||win.document.getElementById&&win.document.getElementById('saturn-recovery'))return;var button=win.document.createElement('button');button.id='saturn-recovery';button.textContent='Torna a Saturn TV · premi Indietro';button.style.cssText='position:fixed;top:20px;left:20px;z-index:2147483647;padding:20px;background:#101820;color:white;border:3px solid #8cdeff;font:24px sans-serif';button.addEventListener('click',returnToSite);win.document.body.appendChild(button);button.focus();}
+      win.addEventListener('keydown',function(e){if([13,27,10009].indexOf(e.keyCode)!==-1){e.preventDefault();e.stopImmediatePropagation();returnToSite();}},true);
+      win.document.addEventListener('DOMContentLoaded',recoveryButton);recoveryButton();return recovery;
+    }
     if(win.__saturnTV)return win.__saturnTV;
     var doc=win.document,top=win===win.top,player=host==='play.saturncdn.net';
     var api={version:version,enabled:true,popups:0,resources:0};win.__saturnTV=api;
@@ -19,7 +27,12 @@
     var open=win.open;
     try{Object.defineProperty(win,'open',{configurable:true,get:function(){return function(){if(!api.enabled)return open.apply(win,arguments);api.popups++;return null;};},set:function(){}});}catch(e){}
     function guard(event){
-      if(!api.enabled||own(event.target))return;
+      if(own(event.target)){
+        for(var control=event.target;control&&control!==doc;control=control.parentNode){var action=control.getAttribute&&control.getAttribute('data-saturn-action');if(action&&api.actions&&typeof api.actions[action]==='function'){
+          event.preventDefault();event.stopImmediatePropagation();if(event.type==='click'&&!control.disabled){lastAction[view]=action;api.actions[action]();}return;
+        }}return;
+      }
+      if(!api.enabled)return;
       for(var n=event.target;n&&n!==doc;n=n.parentNode){
         if(n.tagName!=='A'&&n.tagName!=='FORM')continue;
         var href=n.getAttribute(n.tagName==='A'?'href':'action')||'',target=String(n.getAttribute('target')||'').toLowerCase();
@@ -29,7 +42,7 @@
       }
     }
     var events=win.addEventListener?win:doc;
-    events.addEventListener('click',guard,true);doc.addEventListener('submit',guard,true);doc.addEventListener('auxclick',guard,true);
+    events.addEventListener('click',guard,true);['pointerdown','pointerup','mousedown','mouseup'].forEach(function(type){events.addEventListener(type,function(e){if(own(e.target))guard(e);},true);});doc.addEventListener('submit',guard,true);doc.addEventListener('auxclick',guard,true);
     if(win.HTMLFormElement){var fp=win.HTMLFormElement.prototype,submit=fp.submit;fp.submit=function(){if(api.enabled&&!allowed(this.getAttribute('action')||win.location.href)){api.popups++;return;}return submit.apply(this,arguments);};}
     function adResource(el){return el&&/^(SCRIPT|IFRAME)$/.test(el.tagName)&&blocked(el.getAttribute('src')||'');}
     if(win.Node){['appendChild','insertBefore'].forEach(function(name){var original=win.Node.prototype[name];if(!original)return;win.Node.prototype[name]=function(el){if(adResource(el)){api.resources++;return el;}return original.apply(this,arguments);};});}
