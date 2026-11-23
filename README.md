@@ -1,3 +1,15 @@
+# Correzione 0.9.9 — protezione durante il caricamento
+
+- Sulle pagine episodio il filtro attiva una regola del browser per gli script e
+  gli iframe caricati dopo il modulo. Sono ammessi il sito, il player e le risorse
+  autorizzate per il player e la verifica del sito.
+- Gli iframe con origini estranee vengono anche respinti durante l'inserimento.
+  Se uno di essi entra in fullscreen nativo, il modulo prova a farlo uscire.
+- Sul sito **Blu** porta direttamente a **Nascondi annuncio**. Fuori dal sito,
+  **Blu** o **Indietro** tornano a Saturn TV se TizenBrew controlla la scheda.
+- Per una finestra o app aperta dalla TV usa **Home → TizenBrew**. La regola del
+  browser si applica alle risorse successive all'iniezione del modulo.
+
 # Correzione 0.9.8 — cambio puntata e annunci a schermo intero
 
 - Il telecomando segue gli indirizzi delle puntate pubblicati dal sito, anche

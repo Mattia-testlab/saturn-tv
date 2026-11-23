@@ -11,4 +11,7 @@ bridge=bridge.replace('var host = win.location.hostname.toLowerCase();',"var hos
 bridge=bridge.replaceAll("'https://play.saturncdn.net'","'http://localhost:8766'").replaceAll("'https://www.animesaturn.net'","'http://127.0.0.1:8766'");
 fs.writeFileSync(path.join(out,'saturn-bridge-test.js'),bridge);
 for(const file of ['bridge.html','player.html','search.html','favorites.html','ad-focus.html'])fs.copyFileSync(path.join(__dirname,'browser',file),path.join(out,file));
+const episode=path.join(out,'anime','test','ep-71');fs.mkdirSync(episode,{recursive:true});
+fs.copyFileSync(path.join(__dirname,'browser/early-shield.html'),path.join(episode,'index.html'));
+fs.writeFileSync(path.join(out,'shield-probe.js'),'window.shieldProbe=(window.shieldProbe||0)+1;');
 console.log('Fixture: '+out+' (serve only on 127.0.0.1)');

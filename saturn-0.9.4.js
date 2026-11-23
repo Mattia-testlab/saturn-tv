@@ -1,11 +1,16 @@
-/* Saturn TV 0.9.8 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.9 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.8';
+  var version='0.9.9';
   var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com','aqle3.com','sootoarathus.net'];
   var rulesUrl = 'https://raw.githubusercontent.com/Mattia-testlab/saturn-tv/main/ad-domains.json';
   var rulesKey = 'saturn-ad-domains-v1';
   var homeUrl = 'https://www.animesaturn.net/';
+  var playerOrigin = 'https://play.saturncdn.net';
+  var captchaOrigins = [
+    'https://www.google.com/recaptcha/', 'https://www.gstatic.com/recaptcha/',
+    'https://www.recaptcha.net/recaptcha/', 'https://challenges.cloudflare.com'
+  ];
   function domainMatches(host, domain) {
     return host === domain || host.slice(-domain.length - 1) === '.' + domain;
   }
@@ -40,14 +45,15 @@
       if (button || !win.document.body) return;
       button = win.document.createElement('button');
       button.id = 'saturn-recovery';
-      button.textContent = 'Torna a Saturn TV · Indietro o OK';
+      button.textContent = 'Torna a Saturn TV · Indietro, Blu o OK';
       button.style.cssText = 'position:fixed;top:20px;left:20px;z-index:2147483647;padding:20px;background:#101820;color:white;border:3px solid #8cdeff;font:24px sans-serif';
       button.addEventListener('click', returnToSite);
       win.document.body.appendChild(button);
       button.focus();
     }
     win.addEventListener('keydown', function(event) {
-      var back = event.keyCode === 10009 || event.keyCode === 27 || /^(Escape|Back|BrowserBack|XF86Back)$/.test(event.key);
+      var back = event.keyCode === 10009 || event.keyCode === 27 || event.keyCode === 406 ||
+        /^(Escape|Back|BrowserBack|XF86Back|ColorF3Blue)$/.test(event.key);
       var enter = event.keyCode === 13 || event.key === 'Enter';
       if (!back && !(enter && button && win.document.activeElement === button)) return;
       event.preventDefault();
@@ -60,6 +66,32 @@
     mount();
     return recovery;
   }
+  function sourceMatches(url, source) {
+    return url.origin === source || (source.slice(-1) === '/' && url.href.indexOf(source) === 0);
+  }
+  function installEpisodeShield(win) {
+    var doc = win.document;
+    var observer;
+    function mount() {
+      if (!doc.head) return;
+      var policy = doc.createElement('meta');
+      policy.id = 'saturn-episode-policy';
+      policy.setAttribute('http-equiv', 'Content-Security-Policy');
+      var playerScripts = [playerOrigin, 'https://cdn.jwplayer.com', 'https://ssl.p.jwpcdn.com'];
+      policy.setAttribute('content', [
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' " + playerScripts.concat(captchaOrigins).join(' '),
+        "frame-src 'self' " + [playerOrigin].concat(captchaOrigins).join(' '),
+        "worker-src 'self' blob:"
+      ].join('; '));
+      doc.head.insertBefore(policy, doc.head.firstChild);
+      if (observer) observer.disconnect();
+    }
+    if (doc.head) mount();
+    else if (win.MutationObserver) {
+      observer = new win.MutationObserver(mount);
+      observer.observe(doc, {childList:true,subtree:true});
+    }
+  }
   function install(win){
     var host = win.location.hostname.toLowerCase();
     if(!siteHost(host)&&host!=='play.saturncdn.net'){
@@ -70,6 +102,8 @@
     var doc=win.document,top=win===win.top,player=host==='play.saturncdn.net';
     var api={version:version,enabled:true,popups:0,resources:0};win.__saturnTV=api;
     try{api.enabled=win.sessionStorage.getItem('saturn-disabled')!=='1';}catch(e){}
+    var episodePage = top && siteHost(host) && /^\/(?:anime|episode)\/[^/]+\/ep-\d+\/?$/.test(new win.URL(win.location.href).pathname);
+    if (episodePage && api.enabled) installEpisodeShield(win);
     try{if(siteHost(host)&&win.localStorage.getItem('watch:player')!=='vidstack')win.localStorage.setItem('watch:player','vidstack');}catch(e){}
     function blocked(url){try{return api.enabled&&hostBlocked(new win.URL(String(url),win.location.href).hostname,extraDomains);}catch(e){return false;}}
     function allowed(url){try{var u=new win.URL(url,win.location.href);return /^https?:$/.test(u.protocol)&&!u.username&&!u.password&&(siteHost(u.hostname)||(player&&u.hostname===host));}catch(e){return false;}}
@@ -95,7 +129,20 @@
     var events=win.addEventListener?win:doc;
     events.addEventListener('click',guard,true);['pointerdown','pointerup','mousedown','mouseup'].forEach(function(type){events.addEventListener(type,function(e){if(own(e.target))guard(e);},true);});doc.addEventListener('submit',guard,true);doc.addEventListener('auxclick',guard,true);
     if(win.HTMLFormElement){var fp=win.HTMLFormElement.prototype,submit=fp.submit;fp.submit=function(){if(api.enabled&&!allowed(this.getAttribute('action')||win.location.href)){api.popups++;return;}return submit.apply(this,arguments);};}
-    function adResource(el){return el&&/^(SCRIPT|IFRAME)$/.test(el.tagName)&&blocked(el.getAttribute('src')||'');}
+    function foreignFrame(el) {
+      if (!el || el.tagName !== 'IFRAME') return false;
+      var src = el.getAttribute('src');
+      if (!src || src === 'about:blank') return false;
+      try {
+        var url = new win.URL(src, win.location.href);
+        return url.origin !== new win.URL(win.location.href).origin && url.origin !== playerOrigin &&
+          !captchaOrigins.some(function(source) { return sourceMatches(url, source); });
+      } catch (e) { return true; }
+    }
+    function adResource(el) {
+      if (!api.enabled || !el || !/^(SCRIPT|IFRAME)$/.test(el.tagName)) return false;
+      return blocked(el.getAttribute('src') || '') || ((episodePage || player) && foreignFrame(el));
+    }
     if(win.Node){['appendChild','insertBefore'].forEach(function(name){var original=win.Node.prototype[name];if(!original)return;win.Node.prototype[name]=function(el){if(adResource(el)){api.resources++;return el;}return original.apply(this,arguments);};});}
     if(win.fetch){var fetch=win.fetch;win.fetch=function(input){if(blocked(input&&input.url?input.url:input)){api.resources++;return win.Promise.reject(new Error('Risorsa pubblicitaria bloccata'));}return fetch.apply(win,arguments);};}
     if(win.XMLHttpRequest){var xp=win.XMLHttpRequest.prototype,xopen=xp.open,xsend=xp.send;xp.open=function(method,url){this.__saturnURL=url;return xopen.apply(this,arguments);};xp.send=function(){if(blocked(this.__saturnURL)){api.resources++;this.abort();return;}return xsend.apply(this,arguments);};}
@@ -317,6 +364,10 @@
       if(el.tagName==='IFRAME'&&/embed|captcha|turnstile/i.test(el.getAttribute('src')||''))return false;
       var css=win.getComputedStyle(el),r=el.getBoundingClientRect();return css.position==='fixed'&&css.display!=='none'&&css.visibility!=='hidden'&&css.opacity!=='0'&&css.pointerEvents!=='none'&&r.width>=win.innerWidth*.3&&r.height>=win.innerHeight*.25;
     }
+    function openAdControls(){
+      if(!bar||view!=='main')switchView('main');
+      focus(buttons.filter(function(button){return button.getAttribute('data-saturn-action')==='adShortcut';})[0]);
+    }
     function reclaimOverlayFocus(frame){
       frame=frame||doc.activeElement;
       if(!top||!api.enabled||!frame||frame.tagName!=='IFRAME'||trustedFrame(frame))return;
@@ -326,9 +377,8 @@
       for(var el=frame;el&&el!==doc.body;el=el.parentNode){
         if(!overlayCandidate(el))continue;
         // Back would otherwise be delivered to the foreign iframe, not Saturn TV.
-        if(!bar||view!=='main')switchView('main');
+        openAdControls();
         if(previousFocus===frame)previousFocus=null;
-        focus(buttons.filter(function(button){return button.getAttribute('data-saturn-action')==='adShortcut';})[0]);
         return;
       }
     }
@@ -361,7 +411,7 @@
     }
     function originalControl(action){
       if(action==='toggleVideo'){
-        var s1=['media-play-button','.jw-icon-playback','.jw-display-icon-container','.jw-display-icon-display','.jw-icon-display','button[aria-label*="Play" i]','button[aria-label*="Riproduci" i]','button[aria-label*="Pause" i]','button[aria-label*="Pausa" i]'];
+        var s1=['media-play-button','.jw-icon-playback','.jw-icon-display','.jw-display-icon-display','button[aria-label*="Play" i]','button[aria-label*="Riproduci" i]','button[aria-label*="Pause" i]','button[aria-label*="Pausa" i]'];
         for(var i=0;i<s1.length;i++){var el=doc.querySelector(s1[i]);if(!el||!el.getBoundingClientRect)continue;var r=el.getBoundingClientRect();if(r.width>0&&r.height>0)return{el:el,x:r.left+r.width/2,y:r.top+r.height/2};}
         var s2=['media-player video','media-player','.jw-media','.jw-aspect','.jw-wrapper','.jwplayer','video'];
         for(var j=0;j<s2.length;j++){var vel=doc.querySelector(s2[j]);if(!vel||!vel.getBoundingClientRect)continue;var vr=vel.getBoundingClientRect();if(vr.width>0&&vr.height>0)return{el:vel,x:vr.left+vr.width/2,y:vr.top+vr.height/2};}
@@ -462,6 +512,15 @@
     function key(event){
       var code=keyCode(event),target=event.target||doc.activeElement;
       if(fullscreen()){
+        if(code===406){
+          prevent(event);
+          if(!event.repeat){
+            exitNative();
+            if(top)openAdControls();
+            else if(player)win.parent.postMessage({saturnTV:1,type:'adControls'},'https://www.animesaturn.net');
+          }
+          return;
+        }
         if(code===10009){if(!event.repeat&&exitNative()){prevent(event);return;}if(event.repeat){prevent(event);return;}}
         else if(top){
           if(code===13||code===415||code===19||code===10252){prevent(event);if(!event.repeat)playerControl('toggleVideo');}
@@ -492,7 +551,8 @@
         return;
       }
       if(code===405){prevent(event);if(!event.repeat)api.actions.filter();return;}
-      if(code===10009||code===406){prevent(event);if(!event.repeat){if(!bar)switchView('main');else if(view!=='main')switchView(view==='favorite'?'favorites':'main');else close();}return;}
+      if(code===406){prevent(event);if(!event.repeat)openAdControls();return;}
+      if(code===10009){prevent(event);if(!event.repeat){if(!bar)switchView('main');else if(view!=='main')switchView(view==='favorite'?'favorites':'main');else close();}return;}
       if(bar){
         if([37,38,39,40,13,27].indexOf(code)===-1)return;prevent(event);
         if(code===27){close();return;}if(code===13){if(!event.repeat&&buttons.indexOf(doc.activeElement)!==-1)doc.activeElement.click();return;}
@@ -510,12 +570,22 @@
     events.addEventListener('blur',function(event){stop();if(top&&event.target===win&&win.setTimeout)win.setTimeout(reclaimOverlayFocus,0);},true);
     function reportFullscreen(){if(player&&!top)win.parent.postMessage({saturnTV:1,type:'fullscreen',active:fullscreen()},'https://www.animesaturn.net');}
     doc.addEventListener('DOMContentLoaded',ensurePointer);
-    doc.addEventListener('fullscreenchange',function(){stop();playerFullscreen=false;ensurePointer();wake();reportFullscreen();});
-    doc.addEventListener('webkitfullscreenchange',function(){stop();playerFullscreen=false;ensurePointer();wake();reportFullscreen();});
+    function onFullscreenChange(){
+      stop();playerFullscreen=false;
+      var element=doc.fullscreenElement||doc.webkitFullscreenElement||doc.webkitCurrentFullScreenElement;
+      if(top&&api.enabled&&foreignFrame(element)){
+        exitNative();
+        openAdControls();
+      }
+      ensurePointer();wake();reportFullscreen();
+    }
+    doc.addEventListener('fullscreenchange',onFullscreenChange);
+    doc.addEventListener('webkitfullscreenchange',onFullscreenChange);
     if(win.addEventListener)win.addEventListener('message',function(event){
       var data=event.data;if(!data||data.saturnTV!==1)return;
       if(top){var frame=doc.querySelector&&doc.querySelector('iframe#watch-iframe');if(!trustedFrame(frame)||event.source!==frame.contentWindow||event.origin!=='https://play.saturncdn.net')return;
         if(data.type==='ready'){settingsSync();var queued=pendingPlayer;pendingPlayer=[];queued.forEach(function(item){if(Date.now()-item.time<5000&&item.page===win.location.href)sendPlayer(item.data);});}
+        else if(data.type==='adControls')openAdControls();
         else if(data.type==='fullscreen'){playerFullscreen=data.active===true?frame.contentWindow:false;if(pointer)pointer.style.display=(bar||fullscreen())?'none':'block';}
         else if(data.type==='controlResult'){
           if(data.action==='status'){var state=data.status||{};report('Lettore del sito · '+(state.paused?'pausa':'play')+' · pronto '+state.ready+' · '+state.time+' s · '+state.width+'×'+state.height+(state.error?' · '+state.error:''));}

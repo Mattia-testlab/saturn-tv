@@ -25,9 +25,9 @@ class Handler(BaseHTTPRequestHandler):
  def log_message(self,fmt,*args):pass
  def do_GET(self):
   path=urlsplit(self.path).path
-  if path=='/':
+  if path in ('/','/anime/test/ep-50'):
    frame='http://localhost:8768'+frame_path
-   text='''<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV VERSION · player originale</title><style>body{background:#101820;color:#eef6ff;font:20px sans-serif;margin:16px}iframe{width:calc(100vw - 32px);max-width:1000px;height:50vw;max-height:562px;border:0}button{font:inherit;padding:12px}</style><h1>Player originale del sito</h1><p>Modulo VERSION: barra completa, filtro e cursore. Collaudo sul Mac.</p><iframe id="watch-iframe" allow="autoplay;fullscreen" allowfullscreen src="FRAME" title="Player originale"></iframe><p><button onclick="__saturnTV.actions.main()">Navigazione</button></p><script src="/saturn-real-test.js"></script></html>'''.replace('FRAME',html.escape(frame,quote=True)).replace('VERSION',json.loads((root.parent/'package.json').read_text())['version'])
+   text='''<!doctype html><html lang="it"><meta charset="utf-8"><title>Saturn TV VERSION · player originale</title><style>body{background:#101820;color:#eef6ff;font:20px sans-serif;margin:16px}iframe{width:calc(100vw - 32px);max-width:1000px;height:50vw;max-height:562px;border:0}button{font:inherit;padding:12px}</style><h1>Player originale del sito</h1><p>Modulo VERSION: barra completa, filtro e cursore. Collaudo sul Mac.</p><script src="/saturn-real-test.js"></script><iframe id="watch-iframe" allow="autoplay;fullscreen" allowfullscreen src="FRAME" title="Player originale"></iframe><p><button onclick="__saturnTV.actions.main()">Navigazione</button></p></html>'''.replace('FRAME',html.escape(frame,quote=True)).replace('VERSION',json.loads((root.parent/'package.json').read_text())['version'])
    data=text.encode();kind='text/html'
   elif path=='/saturn-real-test.js':
    source=module.read_text().replace('var host = win.location.hostname.toLowerCase();',"var host = win.location.hostname.toLowerCase(); if(host==='127.0.0.1')host='www.animesaturn.net';else if(host==='localhost')host='play.saturncdn.net';")

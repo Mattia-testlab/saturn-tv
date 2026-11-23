@@ -12,7 +12,7 @@ function fixture(host='www.animesaturn.net',child=false,options={}){
  }
  doc={body:new El('body'),documentElement:{},activeElement:null,createElement(tag){changes.push(['create',tag]);return new El(tag);},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(k,f){docEvents[k]=f;}};
  const parent={postMessage(data,origin){sent.push({data,origin});}};
- const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+'/',assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
+ const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+(options.path||'/'),assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
  win.top=child?{}:win;win.parent=parent;if(options.fetch)win.fetch=options.fetch;
  const api=install(win);sent.length=0;
  function key(code,target){let stopped=false;events.keydown({keyCode:code,target:target||doc.activeElement,preventDefault(){stopped=true;},stopImmediatePropagation(){}});return stopped;}
@@ -362,4 +362,22 @@ test('foreign fullscreen overlay iframe loses focus to the reachable ad control'
  frame.focus();f.docEvents.load({target:frame});
  assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'adShortcut');
  f.key(10009);assert.notEqual(f.doc.activeElement,frame);f.key(10009);assert.ok(barButtons(f).length);
+});
+
+test('episode shield rejects an unknown foreign frame while permitting the player and CAPTCHA frame',()=>{
+ const f=fixture(undefined,false,{path:'/anime/test/ep-71'}),container=new f.El('div');
+ const sources=['https://unknown-banners.com/view','https://play.saturncdn.net/embed/71','https://www.google.com/recaptcha/api2/anchor','https://www.google.com/unrelated'];
+ for(const src of sources){const node=new f.El('iframe');node.setAttribute('src',src);container.appendChild(node);}
+ assert.deepEqual(container.children.map(el=>el.getAttribute('src')),sources.slice(1,3));
+ f.api.enabled=false;const unfiltered=new f.El('iframe');unfiltered.setAttribute('src',sources[0]);container.appendChild(unfiltered);assert.equal(container.children[2],unfiltered);
+});
+test('Blue opens the ad command after leaving fullscreen, and works on an external recovery page',()=>{
+ const f=fixture();f.doc.fullscreenElement={};f.doc.exitFullscreen=()=>{f.doc.fullscreenElement=null;};
+ assert.equal(f.key(406),true);assert.equal(f.doc.fullscreenElement,null);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'adShortcut');
+ const foreign=fixture('unknown-ad.net');let dest;foreign.win.location.replace=url=>{dest=url;};foreign.key(406);assert.equal(dest,'https://www.animesaturn.net/');
+});
+test('an unexpected iframe cannot hold browser fullscreen even without a Back key',()=>{
+ const f=fixture(),frame=new f.El('iframe');frame.setAttribute('src','https://new-popup.net/banner');
+ f.doc.fullscreenElement=frame;f.doc.exitFullscreen=()=>{f.doc.fullscreenElement=null;};
+ f.docEvents.fullscreenchange();assert.equal(f.doc.fullscreenElement,null);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'adShortcut');
 });

@@ -1,0 +1,25 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Saturn TV · prova filtro prima dei clic</title>
+<script>window.blockedByPolicy=[];addEventListener('securitypolicyviolation',e=>blockedByPolicy.push(e.effectiveDirective));</script>
+<script src="/saturn-bridge-test.js"></script>
+<script src="http://127.0.0.1:8767/shield-probe.js"></script>
+<script src="/shield-probe.js"></script>
+</head><body>
+<h1>Collaudo del filtro prima dei clic</h1>
+<iframe id="official-fixture" src="/search.html" title="Riquadro della stessa origine"></iframe>
+<iframe id="foreign-fixture" src="http://127.0.0.1:8767/player.html" title="Riquadro esterno di prova"></iframe>
+<iframe id="watch-iframe" src="http://localhost:8766/player.html" title="Player autorizzato di prova"></iframe>
+<ul id="results"></ul>
+<script>
+addEventListener('message',e=>{if(e.origin==='http://localhost:8766'&&e.source===document.getElementById('watch-iframe').contentWindow&&e.data.classicTest===1)window.authorizedPlayer=true;});
+addEventListener('load',()=>setTimeout(()=>{
+ function check(label,ok){const item=document.createElement('li');item.textContent=(ok?'PASS — ':'FAIL — ')+label;document.getElementById('results').appendChild(item);}
+ check('Gli script del sito vengono caricati',window.shieldProbe===1);
+ check('Lo script esterno nella pagina viene bloccato prima di un clic',blockedByPolicy.some(name=>/^script-src/.test(name)));
+ const own=document.getElementById('official-fixture');
+ check('Il riquadro della stessa origine rimane accessibile',!!own.contentDocument.querySelector('h1'));
+ check('Il player autorizzato resta caricato',!!document.getElementById('watch-iframe')&&window.authorizedPlayer===true);
+ check('Il riquadro esterno nel markup viene bloccato o rimosso',blockedByPolicy.includes('frame-src')||!document.getElementById('foreign-fixture'));
+ const dynamic=document.createElement('iframe');dynamic.src='http://127.0.0.1:8767/player.html';document.body.appendChild(dynamic);
+ check('Un nuovo riquadro esterno viene bloccato prima dell’inserimento',!dynamic.isConnected);
+},100));
+</script></body></html>
