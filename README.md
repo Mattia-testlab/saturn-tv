@@ -1,3 +1,9 @@
+# Indietro sugli annunci · 0.9.10
+
+Su un riquadro fisso che copre quasi tutto lo schermo, premi **Indietro**. Saturn TV cerca il riquadro sotto il centro dello schermo, lo nasconde e ne salva la firma quando è riconoscibile. Puoi annullare la rimozione dalla barra. Sul video il tasto mantiene la funzione di uscita dal fullscreen.
+
+Se TizenBrew carica il modulo su una pagina pubblicitaria esterna, **Indietro** torna alla puntata quando il browser comunica il suo indirizzo, altrimenti alla home. Alle visite successive alla stessa origine pubblicitaria il modulo torna direttamente alla home. Una finestra aperta da un’altra app riceve i propri comandi.
+
 # Correzione 0.9.9 — protezione durante il caricamento
 
 - Sulle pagine episodio il filtro attiva una regola del browser per gli script e

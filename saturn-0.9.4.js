@@ -1,7 +1,7 @@
-/* Saturn TV 0.9.9 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.10 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.9';
+  var version='0.9.10';
   var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com','aqle3.com','sootoarathus.net'];
   var rulesUrl = 'https://raw.githubusercontent.com/Mattia-testlab/saturn-tv/main/ad-domains.json';
   var rulesKey = 'saturn-ad-domains-v1';
@@ -40,7 +40,29 @@
   function siteHost(host){return /^(www\.)?animesaturn\.net$/.test(String(host).toLowerCase());}
   function installRecovery(win) {
     var button;
-    function returnToSite() { win.location.replace(homeUrl); }
+    var memoryKey = 'saturn-dismissed-redirect';
+    function returnToSite() {
+      try { win.localStorage.setItem(memoryKey, '1'); } catch (e) {}
+      var destination = homeUrl;
+      try {
+        var from = new win.URL(win.document.referrer);
+        if (from.origin === new win.URL(homeUrl).origin && /^\/(?:anime|episode)\/[^/]+\/ep-\d+\/?$/.test(from.pathname)) destination = from.href;
+      } catch (e) {}
+      win.location.replace(destination);
+    }
+    try {
+      if (win.localStorage.getItem(memoryKey) === '1') {
+        win.location.replace(homeUrl);
+        return {version:version, recovery:true};
+      }
+    } catch (e) {}
+    win.document.addEventListener('tizenhwkey', function(event) {
+      if (event.keyName === 'back') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        returnToSite();
+      }
+    }, true);
     function mount() {
       if (button || !win.document.body) return;
       button = win.document.createElement('button');
@@ -383,9 +405,9 @@
       }
     }
     function recognizedOverlay(el){var signature=overlaySignature(el);if(signature&&learned.indexOf(signature)!==-1)return true;var frames=el.tagName==='IFRAME'?[el]:el.querySelectorAll('iframe[src]');for(var i=0;i<frames.length;i++)if(adResource(frames[i]))return true;return false;}
-    function hideOverlay(automatic,scope){
+    function hideOverlay(automatic,scope,exact){
       if(!scope||!scope.querySelectorAll||!win.getComputedStyle)return false;
-      var nodes=Array.prototype.slice.call(scope.querySelectorAll('div,section,aside,iframe,dialog')),best=null,z=-Infinity;if(scope.tagName)nodes.unshift(scope);
+      var nodes=exact?[]:Array.prototype.slice.call(scope.querySelectorAll('div,section,aside,iframe,dialog')),best=null,z=-Infinity;if(scope.tagName)nodes.unshift(scope);
       nodes.forEach(function(el){if(!overlayCandidate(el)||(automatic&&!recognizedOverlay(el)))return;var layer=parseInt(win.getComputedStyle(el).zIndex,10)||0;if(layer>z){z=layer;best=el;}});
       if(!best)return false;
       var signature=overlaySignature(best);if(!automatic&&signature&&learned.indexOf(signature)===-1){learned.push(signature);learned=learned.slice(-30);writeJSON('saturn-overlay-rules',learned);}
@@ -509,8 +531,33 @@
       finally{wake();}
       return false;
     }
+    function dismissCoveringAd() {
+      if (!api.enabled || !doc.elementsFromPoint || !win.getComputedStyle) return false;
+      var stack = doc.elementsFromPoint(win.innerWidth / 2, win.innerHeight / 2);
+      for (var i = 0; i < stack.length; i++) {
+        if (own(stack[i])) continue;
+        if (stack[i].closest && stack[i].closest('dialog,[role=dialog],[role=alertdialog],[aria-modal=true]')) return false;
+        for (var el = stack[i]; el && el !== doc.body; el = el.parentNode) {
+          if (insidePlayer(el) || editing(el)) return false;
+          if (!overlayCandidate(el)) continue;
+          var rect = el.getBoundingClientRect();
+          if (rect.width < win.innerWidth * .85 || rect.height < win.innerHeight * .85) continue;
+          if (!hideOverlay(false, el, true)) return false;
+          if (fullscreen()) exitNative();
+          previousFocus = null;
+          close();
+          wake();
+          return true;
+        }
+        break;
+      }
+      return false;
+    }
     function key(event){
       var code=keyCode(event),target=event.target||doc.activeElement;
+      if(code===10009 && !event.repeat && !editing(target) && dismissCoveringAd()){
+        prevent(event);return;
+      }
       if(fullscreen()){
         if(code===406){
           prevent(event);
@@ -565,7 +612,20 @@
       prevent(event);wake();if(code===13){if(!event.repeat)activate();}else arrow(code);
     }
     api.handleKey=key;
-    events.addEventListener('keydown',key,true);
+    var lastBackEvent = '', lastBackTime = 0;
+    function dispatchRemote(event, hardware) {
+      var isBack = hardware || keyCode(event) === 10009;
+      if (isBack) {
+        var source = hardware ? 'hardware' : 'keyboard', now = Date.now();
+        if (source !== lastBackEvent && now - lastBackTime < 300) { prevent(event); return; }
+        lastBackTime = now; lastBackEvent = source;
+      }
+      if (hardware) {
+        key({keyCode:10009,target:doc.activeElement,preventDefault:function(){event.preventDefault();},stopImmediatePropagation:function(){event.stopImmediatePropagation();}});
+      } else key(event);
+    }
+    events.addEventListener('keydown',function(event){dispatchRemote(event,false);},true);
+    doc.addEventListener('tizenhwkey',function(event){if(event.keyName==='back')dispatchRemote(event,true);},true);
     events.addEventListener('keyup',function(e){var code=keyCode(e);delete held[code];if(!fullscreen()&&!editing(e.target||doc.activeElement)&&[37,38,39,40,13,10009,405,406,412,415,417,10252].indexOf(code)!==-1)prevent(e);if(player&&!top)win.parent.postMessage({saturnTV:1,type:'keyup',code:code},'https://www.animesaturn.net');},true);
     events.addEventListener('blur',function(event){stop();if(top&&event.target===win&&win.setTimeout)win.setTimeout(reclaimOverlayFocus,0);},true);
     function reportFullscreen(){if(player&&!top)win.parent.postMessage({saturnTV:1,type:'fullscreen',active:fullscreen()},'https://www.animesaturn.net');}

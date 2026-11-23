@@ -12,7 +12,7 @@ function fixture(host='www.animesaturn.net',child=false,options={}){
  }
  doc={body:new El('body'),documentElement:{},activeElement:null,createElement(tag){changes.push(['create',tag]);return new El(tag);},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(k,f){docEvents[k]=f;}};
  const parent={postMessage(data,origin){sent.push({data,origin});}};
- const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+(options.path||'/'),assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
+ const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+(options.path||'/'),replace(url){changes.push(['replace',url]);},assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
  win.top=child?{}:win;win.parent=parent;if(options.fetch)win.fetch=options.fetch;
  const api=install(win);sent.length=0;
  function key(code,target){let stopped=false;events.keydown({keyCode:code,target:target||doc.activeElement,preventDefault(){stopped=true;},stopImmediatePropagation(){}});return stopped;}
@@ -380,4 +380,20 @@ test('an unexpected iframe cannot hold browser fullscreen even without a Back ke
  const f=fixture(),frame=new f.El('iframe');frame.setAttribute('src','https://new-popup.net/banner');
  f.doc.fullscreenElement=frame;f.doc.exitFullscreen=()=>{f.doc.fullscreenElement=null;};
  f.docEvents.fullscreenchange();assert.equal(f.doc.fullscreenElement,null);assert.equal(f.doc.activeElement.getAttribute('data-saturn-action'),'adShortcut');
+});
+test('hardware Back dismisses and remembers the full screen cover in one press',()=>{
+ const f=fixture(),ad=new f.El('div');ad.id='campaign';ad.getBoundingClientRect=()=>({width:1280,height:720});
+ f.doc.body.appendChild(ad);ad.style.setProperty=(k,v)=>{ad.style[k]=v;};
+ f.win.getComputedStyle=el=>({position:'fixed',display:el.style.display||'block'});
+ f.doc.elementsFromPoint=()=>[ad];
+ f.docEvents.tizenhwkey({keyName:'back',preventDefault(){},stopImmediatePropagation(){}});
+ assert.equal(ad.style.display,'none');
+ assert.deepEqual(JSON.parse(f.storage.get('saturn-overlay-rules')),['DIV|campaign||']);
+ f.key(10009);assert.equal(barButtons(f).length,0);
+});
+test('external dismissal remembers the origin and returns to the referring episode',()=>{
+ const f=fixture('new-ad.net');f.doc.referrer='https://www.animesaturn.net/anime/test/ep-71';
+ let dest;f.win.location.replace=url=>{dest=url;};f.key(10009);
+ assert.equal(dest,f.doc.referrer);assert.equal(f.storage.get('saturn-dismissed-redirect'),'1');
+ const next=fixture('new-ad.net',false,{storage:f.storage});assert.deepEqual(next.changes,[['replace','https://www.animesaturn.net/']]);
 });
