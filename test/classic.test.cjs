@@ -13,7 +13,7 @@ function fixture(host='www.animesaturn.net',child=false,options={}){
  doc={body:new El('body'),documentElement:{},activeElement:null,createElement(tag){changes.push(['create',tag]);return new El(tag);},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(k,f){docEvents[k]=f;}};
  const parent={postMessage(data,origin){sent.push({data,origin});}};
  const win={document:doc,Node:El,URL,Promise,innerWidth:1280,innerHeight:720,location:{hostname:host,href:'https://'+host+(options.path||'/'),replace(url){changes.push(['replace',url]);},assign(url){changes.push(['navigate',url]);},reload(){changes.push(['reload']);}},localStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},sessionStorage:{getItem(k){return storage.get(k);},setItem(k,v){storage.set(k,v);}},open(){changes.push(['open']);return 1;},fetch(input){changes.push(['fetch',input]);return Promise.resolve('ok');},setTimeout(){},addEventListener(k,f){events[k]=f;},MouseEvent:function(type,data){this.type=type;Object.assign(this,data);}};
- win.top=child?{}:win;win.parent=parent;if(options.fetch)win.fetch=options.fetch;
+ win.top=child?{}:win;win.parent=parent;if(options.fetch)win.fetch=options.fetch;if(options.observer)win.MutationObserver=options.observer;
  const api=install(win);sent.length=0;
  function key(code,target){let stopped=false;events.keydown({keyCode:code,target:target||doc.activeElement,preventDefault(){stopped=true;},stopImmediatePropagation(){}});return stopped;}
  function message(data,origin='https://www.animesaturn.net',source=parent){events.message({data:{saturnTV:1,...data},origin,source});}
@@ -396,4 +396,24 @@ test('external dismissal remembers the origin and returns to the referring episo
  let dest;f.win.location.replace=url=>{dest=url;};f.key(10009);
  assert.equal(dest,f.doc.referrer);assert.equal(f.storage.get('saturn-dismissed-redirect'),'1');
  const next=fixture('new-ad.net',false,{storage:f.storage});assert.deepEqual(next.changes,[['replace','https://www.animesaturn.net/']]);
+});
+
+test('late blocking removes the empty root click cover while preserving page UI',()=>{
+ let observe;
+ const f=fixture(undefined,false,{path:'/anime/test/ep-71',observer:class { constructor(callback){observe=callback;} observe(){} }});
+ function overlay(){
+  const el=new f.El('div');
+  el.getBoundingClientRect=()=>({left:0,top:0,width:1265,height:720});
+  el.style={position:'fixed',zIndex:'2147483647'};
+  f.doc.body.appendChild(el);
+  return el;
+ }
+ const cover=overlay(),dialog=overlay(),content=overlay();
+ dialog.setAttribute('role','dialog');
+ content.firstChild=new f.El('button');
+ f.win.getComputedStyle=()=>({position:'fixed',pointerEvents:'auto'});
+ observe([{type:'childList',addedNodes:[cover,dialog,content]}]);
+ assert.equal(cover.parentNode,null);
+ assert.equal(dialog.parentNode,f.doc.body);
+ assert.equal(content.parentNode,f.doc.body);
 });

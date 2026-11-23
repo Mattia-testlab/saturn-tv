@@ -1,3 +1,7 @@
+# Correzione 0.9.11 — selezione puntata
+
+Quando il filtro è attivo, sulle pagine delle puntate rimuove il livello trasparente a tutta pagina che intercetta i clic pubblicitari, anche se era già presente quando TizenBrew ha caricato il modulo.
+
 # Indietro sugli annunci · 0.9.10
 
 Su un riquadro fisso che copre quasi tutto lo schermo, premi **Indietro**. Saturn TV cerca il riquadro sotto il centro dello schermo, lo nasconde e ne salva la firma quando è riconoscibile. Puoi annullare la rimozione dalla barra. Sul video il tasto mantiene la funzione di uscita dal fullscreen.

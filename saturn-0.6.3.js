@@ -1,7 +1,7 @@
-/* Saturn TV 0.9.10 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
+/* Saturn TV 0.9.11 — player del sito (Vidstack/JW) · puntate rapide · telecomando Samsung */
 (function(root){
   'use strict';
-  var version='0.9.10';
+  var version='0.9.11';
   var adHosts=['subsignsodaic.com','doubleclick.net','googlesyndication.com','adsterra.com','popads.net','popcash.net','073m.com','a-ads.com','wingsmob.com','sowve.com','chagnougroalry.net','acscdn.com','viowrel.com','aqle3.com','sootoarathus.net'];
   var rulesUrl = 'https://raw.githubusercontent.com/Mattia-testlab/saturn-tv/main/ad-domains.json';
   var rulesKey = 'saturn-ad-domains-v1';
@@ -179,9 +179,10 @@
         if(el.querySelector&&el.querySelector('video,audio,#watch-iframe,#jw-player,media-player'))return;
         el.parentNode.removeChild(el);api.resources++;
       });
+      scanEmptyClickCovers(scope);
       scanOverlays(scope);
     }
-    if(win.MutationObserver)new win.MutationObserver(function(records){records.forEach(function(record){if(record.type==='attributes')scan(record.target);else Array.prototype.forEach.call(record.addedNodes||[],function(n){if(n.nodeType===1)scan(n);});});}).observe(doc,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+    if(win.MutationObserver)new win.MutationObserver(function(records){records.forEach(function(record){if(record.type==='attributes'){if(record.attributeName==='src')scan(record.target);else scanEmptyClickCovers(record.target);}else Array.prototype.forEach.call(record.addedNodes||[],function(n){if(n.nodeType===1)scan(n);});});}).observe(doc,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style']});
 
     function ensureVidstack(){
       if(!top||!siteHost(host))return;
@@ -385,6 +386,25 @@
       if(el.querySelector&&el.querySelector('video,audio,#watch-iframe,#jw-player,#vidstack-player,media-player,form,input,textarea,select,dialog,[role=dialog],[role=alertdialog],[aria-modal=true],iframe[src*="/embed/"],iframe[src*="recaptcha"],iframe[src*="turnstile"]'))return false;
       if(el.tagName==='IFRAME'&&/embed|captcha|turnstile/i.test(el.getAttribute('src')||''))return false;
       var css=win.getComputedStyle(el),r=el.getBoundingClientRect();return css.position==='fixed'&&css.display!=='none'&&css.visibility!=='hidden'&&css.opacity!=='0'&&css.pointerEvents!=='none'&&r.width>=win.innerWidth*.3&&r.height>=win.innerHeight*.25;
+    }
+    function scanEmptyClickCovers(scope) {
+      if (!episodePage || !api.enabled || !win.getComputedStyle) return;
+      function removeCover(el) {
+        if (el.tagName !== 'DIV' || el.id || el.getAttribute('class') || !el.style ||
+            el.style.position !== 'fixed' || el.style.zIndex !== '2147483647' ||
+            (el.parentNode !== doc.documentElement && el.parentNode !== doc.body) ||
+            el.firstChild || el.shadowRoot || el.getAttribute('role') || el.getAttribute('tabindex') ||
+            !overlayCandidate(el)) return;
+        var rect = el.getBoundingClientRect();
+        if (rect.left > 2 || rect.top > 2 || rect.width < win.innerWidth * .97 || rect.height < win.innerHeight * .97) return;
+        el.parentNode.removeChild(el);
+        api.resources++;
+      }
+      if (scope === doc) {
+        [doc.documentElement, doc.body].forEach(function(parent) {
+          if (parent && parent.children) Array.prototype.slice.call(parent.children).forEach(removeCover);
+        });
+      } else removeCover(scope);
     }
     function openAdControls(){
       if(!bar||view!=='main')switchView('main');
